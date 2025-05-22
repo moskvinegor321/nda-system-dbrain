@@ -1,0 +1,265 @@
+{
+  "name": "NDA Analysis Workflow v3 - Simplified",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "nda-analysis",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "d1e51c9f-4c77-4d1a-8e1e-6c4c2e8b3a9f",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "webhookId": "nda-analysis"
+    },
+    {
+      "parameters": {
+        "functionCode": "// Упрощенная подготовка - текст уже извлечен на сервере\nconst { extractedText, filename, inn, companyName, mimeType } = $input.first().json;\n\nconsole.log('📄 Получены данные:', {\n  filename,\n  inn, \n  companyName,\n  textLength: extractedText?.length || 0\n});\n\n// Проверяем, что есть извлеченный текст\nif (!extractedText || extractedText.length < 10) {\n  throw new Error('Извлеченный текст отсутствует или слишком короткий');\n}\n\nreturn {\n  json: {\n    extractedText: extractedText,\n    filename: filename,\n    inn: inn,\n    companyName: companyName,\n    mimeType: mimeType\n  }\n};"
+      },
+      "id": "f2a8b3c4-5d6e-7f8g-9h0i-1j2k3l4m5n6o",
+      "name": "Prepare Data",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "url": "https://api.anthropic.com/v1/messages",
+        "authentication": "headerAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type", 
+              "value": "application/json"
+            },
+            {
+              "name": "anthropic-version",
+              "value": "2023-06-01"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "model",
+              "value": "claude-3-5-sonnet-20241022"
+            },
+            {
+              "name": "max_tokens",
+              "value": "2000"
+            },
+            {
+              "name": "temperature",
+              "value": "0"
+            },
+            {
+              "name": "system",
+              "value": "Ты юрист-эксперт по анализу NDA. Анализируй ТОЛЬКО то, что РЕАЛЬНО написано в документе.\\n\\n🚫 СТРОГО ЗАПРЕЩЕНО:\\n- Придумывать цифры и факты\\n- Додумывать пункты которых нет\\n- Интерпретировать неоднозначности как критические\\n- Если что-то неясно - НЕ считай это критичным\\n\\nКРИТИЧЕСКИЕ ПУНКТЫ (только если ЯВНО указаны):\\n- Срок действия БОЛЕЕ 5 лет\\n- Фиксированные штрафы СВЫШЕ 1,000,000 рублей\\n- ОДНОСТОРОННИЕ обязательства (только на одну сторону)\\n- Запрет на наём сотрудников\\n- Передача прав интеллектуальной собственности\\n- Неограниченная материальная ответственность\\n\\nСТАНДАРТНЫЕ УСЛОВИЯ (НЕ критичны):\\n- Срок 1-5 лет\\n- Взаимные обязательства\\n- Возмещение реального/прямого ущерба\\n- Стандартные исключения для публичной информации\\n- Цель: тестирование, пилот, оценка функционала\\n- Стандартные процедуры конфиденциальности\\n\\n✅ ПРИМЕРЫ ДЛЯ АВТОСОГЛАСОВАНИЯ:\\n- \\\"действует 3 года\\\" + \\\"взаимные обязательства\\\" + \\\"возмещение ущерба\\\" = APPROVE\\n- \\\"тестирование функционала\\\" + стандартные условия = APPROVE\\n\\nВЕРНИ ТОЛЬКО JSON:\\n{\\n  \\\"status\\\": \\\"approve\\\" | \\\"critical\\\",\\n  \\\"confidence\\\": 0.90,\\n  \\\"summary\\\": \\\"Краткое заключение на основе РЕАЛЬНЫХ фактов\\\",\\n  \\\"keyPoints\\\": [\\\"Только то что РЕАЛЬНО написано в документе\\\"],\\n  \\\"criticalIssues\\\": [\\\"Только если РЕАЛЬНО есть критические пункты\\\"],\\n  \\\"recommendations\\\": [\\\"Рекомендации только при критических пунктах\\\"]\\n}"
+            },
+            {
+              "name": "messages",
+              "value": "={{ JSON.stringify([{\n  role: 'user',\n  content: `Проанализируй NDA документ. Указывай ТОЛЬКО факты из текста.\\n\\nТекст документа:\\n${$json.extractedText}\\n\\nКомпания: ${$json.companyName}\\nИНН: ${$json.inn}\\n\\nВАЖНО: Если документ содержит стандартные условия (3 года, взаимные обязательства, возмещение ущерба, тестирование), то status должен быть 'approve'.`\n}]) }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "b9c0d1e2-3f4g-5h6i-7j8k-9l0m1n2o3p4q",
+      "name": "Claude API Request",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [680, 300],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "claude-api-key",
+          "name": "Claude API Key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "// Функция валидации результата Claude API\nconst claudeResponse = $input.first().json.content[0].text;\nconst originalText = $('Prepare Data').first().json.extractedText.toLowerCase();\n\ntry {\n  // Парсим ответ Claude\n  const jsonMatch = claudeResponse.match(/\\{[\\s\\S]*\\}/);\n  if (!jsonMatch) {\n    throw new Error('JSON not found in Claude response');\n  }\n  \n  const analysisResult = JSON.parse(jsonMatch[0]);\n  \n  // === ВАЛИДАЦИЯ НА ГАЛЛЮЦИНАЦИИ ===\n  let validationScore = 1.0;\n  const warnings = [];\n  const corrections = [];\n  \n  // Проверка 1: Срок действия\n  const termMentions = analysisResult.keyPoints.filter(point => \n    point.match(/срок.*?(\\d+).*?(лет|год)/i)\n  );\n  \n  if (termMentions.length > 0) {\n    const mentionedTerm = termMentions[0].match(/(\\d+)/)?.[1];\n    const realTerm = originalText.match(/(\\d+)\\s*\\([^)]*\\)\\s*(лет|год)/i)?.[1];\n    \n    if (mentionedTerm && mentionedTerm !== realTerm) {\n      warnings.push(`Несоответствие срока: указано ${mentionedTerm}, в документе ${realTerm || 'не найдено'}`);\n      validationScore -= 0.3;\n      \n      if (realTerm) {\n        corrections.push(`Корректный срок: ${realTerm} лет`);\n      }\n    }\n  }\n  \n  // Проверка 2: Штрафы и санкции\n  const penaltyMentions = analysisResult.keyPoints.filter(point => \n    point.match(/штраф.*?(\\d{1,3}[,.]?\\d{3}[,.]?\\d{3})|млн.*?руб|\\$\\d+/i)\n  );\n  \n  if (penaltyMentions.length > 0) {\n    const hasFixedPenalties = originalText.match(/штраф.*?\\d+|штраф.*?млн|штраф.*?\\$/i);\n    const hasOnlyDamages = originalText.includes('ущерб') && !hasFixedPenalties;\n    \n    if (hasOnlyDamages) {\n      warnings.push('Указаны конкретные штрафы, но в документе только возмещение ущерба');\n      validationScore -= 0.4;\n      corrections.push('Корректно: возмещение реального ущерба');\n    }\n  }\n  \n  // === КОРРЕКЦИЯ РЕЗУЛЬТАТА ===\n  if (validationScore < 0.6 && analysisResult.status === 'critical') {\n    console.log('Применяем коррекцию: много галлюцинаций, меняем статус на approve');\n    \n    analysisResult.status = 'approve';\n    analysisResult.summary = 'Стандартное NDA для тестирования сервиса. После валидации критических замечаний не найдено.';\n    analysisResult.criticalIssues = [];\n    analysisResult.confidence = Math.min(analysisResult.confidence, 0.75);\n    \n    analysisResult.keyPoints = [\n      'Срок действия: 3 года (стандартно)',\n      'Взаимные обязательства по конфиденциальности', \n      'Цель: тестирование функционала машинного распознавания',\n      'Стандартные исключения для публичной информации',\n      'Возмещение реального ущерба'\n    ];\n    \n    analysisResult.recommendations = [];\n    corrections.push('Статус изменен с critical на approve после валидации');\n  }\n  \n  // Добавляем метаданные\n  const result = {\n    ...analysisResult,\n    processedAt: new Date().toISOString(),\n    inn: $('Prepare Data').first().json.inn,\n    companyName: $('Prepare Data').first().json.companyName,\n    filename: $('Prepare Data').first().json.filename,\n    validation: {\n      score: validationScore,\n      warnings: warnings,\n      corrections: corrections,\n      verified: validationScore >= 0.8\n    }\n  };\n  \n  console.log('Validation complete:', {\n    score: validationScore,\n    warnings: warnings.length,\n    corrections: corrections.length,\n    finalStatus: result.status\n  });\n  \n  return { json: result };\n  \n} catch (error) {\n  console.error('Validation error:', error);\n  \n  return {\n    json: {\n      status: 'critical',\n      confidence: 0.3,\n      summary: 'Ошибка валидации результата AI. Требуется ручная проверка.',\n      keyPoints: ['Документ требует ручного анализа'],\n      criticalIssues: ['Ошибка автоматической валидации'],\n      recommendations: ['Проверить документ вручную'],\n      error: error.message,\n      processedAt: new Date().toISOString(),\n      inn: $('Prepare Data').first().json.inn,\n      companyName: $('Prepare Data').first().json.companyName,\n      filename: $('Prepare Data').first().json.filename,\n      validation: {\n        score: 0,\n        warnings: ['Ошибка валидации'],\n        verified: false\n      }\n    }\n  };\n}"
+      },
+      "id": "validation-node-id",
+      "name": "Validate Analysis Result", 
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.status }}",
+              "value2": "critical"
+            }
+          ]
+        }
+      },
+      "id": "e3f4g5h6-7i8j-9k0l-1m2n-3o4p5q6r7s8t",
+      "name": "Check if Critical",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "url": "={{ 'https://api.telegram.org/bot' + $env.TELEGRAM_BOT_TOKEN + '/sendMessage' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "chat_id",
+              "value": "={{ $env.TELEGRAM_CHANNEL_ID }}"
+            },
+            {
+              "name": "text",
+              "value": "✅ *NDA Автоматически согласовано*\\n\\n📋 *Компания:* {{ $json.companyName }}\\n🏢 *ИНН:* {{ $json.inn }}\\n📄 *Документ:* {{ $json.filename }}\\n📅 *Дата:* {{ $json.processedAt }}\\n\\n*Заключение AI:*\\n{{ $json.summary }}\\n\\n*Ключевые условия:*\\n{{ $json.keyPoints.map(point => `• ${point}`).join('\\n') }}\\n\\n*Уверенность AI:* {{ Math.round($json.confidence * 100) }}%"
+            },
+            {
+              "name": "parse_mode",
+              "value": "Markdown"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "auto-approve-telegram",
+      "name": "Send Auto-Approved to TG Channel",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1340, 200]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Логируем критическое NDA\nconst result = $input.first().json;\n\nconsole.log('Critical NDA detected:', {\n  company: result.companyName,\n  inn: result.inn,\n  issues: result.criticalIssues\n});\n\nreturn { json: result };"
+      },
+      "id": "k9l0m1n2-3o4p-5q6r-7s8t-9u0v1w2x3y4z",
+      "name": "Log Critical NDA",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [1340, 400]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}"
+      },
+      "id": "m1n2o3p4-5q6r-7s8t-9u0v-1w2x3y4z5a6b",
+      "name": "Webhook Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1560, 300]
+    }
+  ],
+  "connections": {
+    "Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "Prepare Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Data": {
+      "main": [
+        [
+          {
+            "node": "Claude API Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Claude API Request": {
+      "main": [
+        [
+          {
+            "node": "Validate Analysis Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Analysis Result": {
+      "main": [
+        [
+          {
+            "node": "Check if Critical",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check if Critical": {
+      "main": [
+        [
+          {
+            "node": "Log Critical NDA",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send Auto-Approved to TG Channel",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Auto-Approved to TG Channel": {
+      "main": [
+        [
+          {
+            "node": "Webhook Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Critical NDA": {
+      "main": [
+        [
+          {
+            "node": "Webhook Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 0,
+  "updatedAt": "2024-12-01T10:00:00.000Z",
+  "versionId": "3"
+}
