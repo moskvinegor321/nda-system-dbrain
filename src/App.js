@@ -90,6 +90,13 @@ const NDAApprovalApp = () => {
     }
   };
 
+  const resetForm = () => {
+    setCurrentStep(1);
+    setFormData({ file: null, responsible: '', companyName: '', comment: '' });
+    setAnalysisResult(null);
+    setError(null);
+  };
+
   // Экран 1: Загрузка документа
   if (currentStep === 1) {
     return (
