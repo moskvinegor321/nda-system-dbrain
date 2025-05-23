@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { Upload, CheckCircle, AlertTriangle, MessageCircle, FileText, Building, User, MessageSquare } from 'lucide-react';
+import { Upload, CheckCircle, AlertTriangle, FileText, Building, User } from 'lucide-react';
 
 // API Configuration
 const API_BASE_URL = 'https://nda-system-dbrain.onrender.com';
@@ -20,12 +20,13 @@ const NDAApprovalApp = () => {
 
   const handleFileUpload = (event) => {
     const file = event.target.files[0];
-    
-    if (file && !file.type.includes('pdf') && !file.name.toLowerCase().endsWith('.pdf')) {
-      setError('Пожалуйста, выберите PDF файл');
+    const allowedExtensions = ['.pdf', '.doc', '.docx', '.txt', '.rtf'];
+    const fileName = file ? file.name.toLowerCase() : '';
+    const isAllowed = allowedExtensions.some(ext => fileName.endsWith(ext));
+    if (file && !isAllowed) {
+      setError('Пожалуйста, выберите PDF, DOCX, DOC, TXT или RTF файл');
       return;
     }
-    
     setError(null);
     setFormData(prev => ({ ...prev, file }));
   };
@@ -87,55 +88,6 @@ const NDAApprovalApp = () => {
     } finally {
       setLoading(false);
     }
-  };
-
-  const handleAutoApprove = async () => {
-    try {
-      alert('✅ NDA автоматически согласовано!\n\nИнформация отправлена в Telegram канал для уведомления команды.');
-      resetForm();
-    } catch (error) {
-      console.error('Ошибка автоматического согласования:', error);
-      alert('Ошибка: ' + error.message);
-    }
-  };
-
-  const handleSendToTelegram = async () => {
-    try {
-      setLoading(true);
-      
-      const response = await fetch(`${API_BASE_URL}/api/send-approval-request`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          responsible: formData.responsible,
-          companyName: formData.companyName,
-          analysis: analysisResult,
-          filename: formData.file.name,
-          comment: formData.comment || ''
-        })
-      });
-
-      const result = await response.json();
-
-      if (response.ok) {
-        alert('Запрос на согласование отправлен в Telegram! Проверьте бота.');
-        resetForm();
-      } else {
-        throw new Error(result.error || 'Ошибка отправки в Telegram');
-      }
-    } catch (error) {
-      console.error('Ошибка отправки в Telegram:', error);
-      alert('Ошибка: ' + error.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const resetForm = () => {
-    setCurrentStep(1);
-    setFormData({ file: null, responsible: '', companyName: '', comment: '' });
-    setAnalysisResult(null);
-    setError(null);
   };
 
   // Экран 1: Загрузка документа
@@ -269,7 +221,7 @@ const NDAApprovalApp = () => {
 
   // Экран 2: Результат анализа
   if (currentStep === 2 && analysisResult) {
-    const isApproved = analysisResult.status === 'approve';
+    const isApproved = ['approve', 'auto-approve', 'approved'].includes(analysisResult.status);
     
     if (isApproved) {
       return (

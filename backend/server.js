@@ -595,7 +595,7 @@ async function sendDecisionToChannel(application, decision, decidedBy) {
   
   // Экранируем специальные символы Markdown
   const escapeMarkdown = (text) => {
-    return text ? text.replace(/[_*[\]()~`>#+=|{}.!-]/g, '\\$&') : '';
+    return text ? text.replace(/[_*\[\]()~`>#+=|{}.!-]/g, '\$&') : '';
   };
   
   const commentSection = application.comment ? 
@@ -613,7 +613,7 @@ async function sendDecisionToChannel(application, decision, decidedBy) {
     console.log('📤 Отправляем сообщение в канал...');
     console.log('💬 Комментарий:', application.comment || 'нет');
     
-    await fetch(`${config.telegram.apiUrl}/sendMessage`, {
+    const response = await fetch(`${config.telegram.apiUrl}/sendMessage`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -622,6 +622,8 @@ async function sendDecisionToChannel(application, decision, decidedBy) {
         parse_mode: 'Markdown'
       })
     });
+    const result = await response.json();
+    console.log('Результат отправки в канал:', result);
   } catch (error) {
     console.error('❌ Ошибка отправки в канал:', error);
   }
@@ -632,10 +634,15 @@ app.get('/api/download/:filename', async (req, res) => {
   try {
     const { filename } = req.params;
     const filePath = path.join('uploads', filename);
-    
-    await fs.access(filePath);
-    res.download(filePath);
-
+    console.log('Пытаемся скачать файл:', filePath);
+    try {
+      await fs.access(filePath);
+      console.log('Файл найден, отправляем на скачивание');
+      res.download(filePath);
+    } catch (accessError) {
+      console.error('Файл не найден:', filePath);
+      res.status(404).json({ error: 'Файл не найден' });
+    }
   } catch (error) {
     console.error('Ошибка скачивания:', error);
     res.status(404).json({ error: 'Файл не найден' });
