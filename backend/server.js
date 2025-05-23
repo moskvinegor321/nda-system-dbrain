@@ -357,11 +357,14 @@ ${application.analysis.criticalIssues.map(issue => `• ${escapeMarkdown(issue)}
 ${application.comment ? `*Комментарий специалиста:*
 ${escapeMarkdown(application.comment)}` : ''}`;
 
-  const keyboard = {
+ const keyboard = {
     inline_keyboard: [
       [
         { text: '✅ Согласовать', callback_data: `approve_${token}` },
         { text: '❌ Отклонить', callback_data: `reject_${token}` }
+      ],
+      [
+        { text: '📄 Скачать NDA', url: `https://nda-system-dbrain.onrender.com/api/download/${application.filename}` }
       ]
     ]
   };
@@ -424,12 +427,23 @@ app.post('/api/telegram-webhook', async (req, res) => {
 
     const [action, token] = data.split('_');
     
-    const application = applications.get(token);
-    if (!application) {
-      console.log('❌ Заявка не найдена для токена:', token);
-      await answerCallbackQuery(callbackId, 'Заявка не найдена или устарела');
-      return res.json({ ok: true });
-    }
+  // Создаем минимальный объект application из данных сообщения
+    const application = {
+      token: token,
+      companyName: 'Неизвестно',
+      inn: 'Неизвестно',
+      filename: 'Неизвестно'
+    };
+    
+    // Пытаемся извлечь данные из текста сообщения
+    const messageText = messageData.text || '';
+    const companyMatch = messageText.match(/Компания:\s*(.+)/);
+    const innMatch = messageText.match(/ИНН:\s*(.+)/);
+    const fileMatch = messageText.match(/Файл:\s*(.+)/);
+    
+    if (companyMatch) application.companyName = companyMatch[1].trim();
+    if (innMatch) application.inn = innMatch[1].trim();
+    if (fileMatch) application.filename = fileMatch[1].trim();
 
     if (action === 'approve') {
       console.log('✅ Обрабатываем согласование...');
