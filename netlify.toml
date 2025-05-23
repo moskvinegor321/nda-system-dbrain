@@ -1,0 +1,13 @@
+[build]
+  base = "frontend-new"
+  command = "CI= npm install --legacy-peer-deps && npm run build"
+  publish = "frontend-new/build"
+
+[build.environment]
+  NODE_VERSION = "18"
+  NPM_FLAGS = "--legacy-peer-deps --no-optional"
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200 
