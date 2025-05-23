@@ -387,7 +387,7 @@ ${escapeMarkdown(application.comment)}` : ''}`;
       ],
       [
         { text: '⚖️ Отправить юристам', callback_data: `lawyers_${shortId}` },
-        { text: '📄 Скачать NDA', url: `https://nda-system-dbrain.onrender.com/api/download/${encodeURIComponent(application.filename)}` }
+        { text: '�� Скачать NDA', url: `${process.env.BACKEND_URL || 'https://nda-system-dbrain.onrender.com'}/api/download/${encodeURIComponent(application.filename)}` }
       ]
     ]
   };
@@ -448,14 +448,15 @@ app.post('/api/telegram-webhook', async (req, res) => {
     }
 
     const [action, shortId] = data.split('_');
-    const token = tokenMap.get(shortId);
+    const tokenData = tokenMap.get(shortId);
     
-    if (!token) {
+    if (!tokenData) {
       console.log('⚠️ Токен не найден для shortId:', shortId);
       await answerCallbackQuery(callbackId, 'Ошибка: действие устарело');
       return res.json({ ok: true });
     }
 
+    const token = tokenData.token;
     const application = applications.get(token) || {
       token: token,
       companyName: 'Неизвестно',
