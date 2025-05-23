@@ -294,12 +294,38 @@ const NDAApprovalApp = () => {
       }
     };
 
+    // --- Функция автоапрува с отправкой в Telegram ---
+    const handleAutoApprove = async () => {
+      try {
+        setLoading(true);
+        const response = await fetch(`${API_BASE_URL}/api/send-approval-request`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            responsible: formData.responsible,
+            companyName: formData.companyName,
+            analysis: analysisResult,
+            filename: formData.file?.name || '',
+            comment: formData.comment || ''
+          })
+        });
+        const result = await response.json();
+        if (response.ok) {
+          alert('✅ NDA автоматически согласовано!\n\nИнформация отправлена в Telegram канал для уведомления команды.');
+          resetForm();
+        } else {
+          throw new Error(result.error || 'Ошибка отправки в Telegram');
+        }
+      } catch (error) {
+        console.error('Ошибка автоматического согласования:', error);
+        alert('Ошибка: ' + error.message);
+      } finally {
+        setLoading(false);
+      }
+    };
+
     if (isApproved) {
       // --- Красивая форма для автоапрува ---
-      const handleAutoApprove = () => {
-        alert('✅ NDA автоматически согласовано!\n\nИнформация отправлена в Telegram канал для уведомления команды.');
-        resetForm();
-      };
       return (
         <div className="min-h-screen bg-gray-50 py-12 px-4">
           <div className="max-w-3xl mx-auto">
