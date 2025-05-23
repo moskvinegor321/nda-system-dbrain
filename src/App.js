@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Upload, CheckCircle, AlertTriangle, MessageCircle, FileText, Building, Hash, MessageSquare } from 'lucide-react';
+import { Upload, CheckCircle, AlertTriangle, MessageCircle, FileText, Building, User, MessageSquare } from 'lucide-react';
 
 // API Configuration
 const API_BASE_URL = 'https://nda-system-dbrain.onrender.com';
@@ -175,7 +175,7 @@ const NDAApprovalApp = () => {
               {/* Responsible Person Field */}
               <div>
                 <label className="flex items-center text-sm font-medium text-gray-700 mb-3">
-                  <Hash className="w-4 h-4 mr-2 text-gray-500" />
+                  <User className="w-4 h-4 mr-2 text-gray-500" />
                   Ответственный
                 </label>
                 <input

@@ -243,6 +243,7 @@ app.post('/api/analyze-nda', upload.single('file'), async (req, res) => {
       extractedText: extractedText,
       filename: file.filename,
       responsible: responsible,
+      inn: responsible,
       companyName: companyName,
       mimeType: file.mimetype || 'application/pdf'
     };
