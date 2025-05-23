@@ -406,6 +406,9 @@ async function sendTelegramApprovalRequest(application) {
     return text.replace(/[_*\[\]()~`>#+=|{}.!-]/g, '\\$&');
   };
 
+  // --- Кнопка скачивания ---
+  let downloadUrl = application.gdriveLink || (application.analysis && application.analysis.gdriveLink) || `${process.env.BACKEND_URL || 'https://nda-system-dbrain.onrender.com'}/api/download/${encodeURIComponent(application.filename)}`;
+
   const message = `🔔 *Требуется согласование NDA*
 
 📋 *Компания:* ${escapeMarkdown(application.companyName)}
@@ -434,7 +437,7 @@ ${escapeMarkdown(application.comment)}` : ''}`;
       ],
       [
         { text: '⚖️ Отправить юристам', callback_data: String(`lawyers_${shortId}`) },
-        { text: '📄 Скачать NDA', url: String(`${process.env.BACKEND_URL || 'https://nda-system-dbrain.onrender.com'}/api/download/${encodeURIComponent(application.filename)}`) }
+        { text: '📄 Скачать NDA', url: String(downloadUrl) }
       ]
     ]
   };
@@ -631,12 +634,12 @@ async function sendDecisionToChannel(application, decision, decidedBy) {
   let channelMessage = '';
   // Экранируем специальные символы Markdown
   const escapeMarkdown = (text) => {
-    return text ? text.replace(/[_*\[\]()~`>#+=|{}.!-]/g, '\$&') : '';
+    return text ? text.replace(/[_*\[\]()~`>#+=|{}.!-]/g, '\\$&') : '';
   };
   const commentSection = application.comment ? 
     `\n\n💬 *Комментарий:*\n${escapeMarkdown(application.comment)}` : '';
   // Формируем ссылку на скачивание
-  const downloadUrl = `${process.env.BACKEND_URL || 'https://nda-system-dbrain.onrender.com'}/api/download/${encodeURIComponent(application.filename)}`;
+  let downloadUrl = application.gdriveLink || (application.analysis && application.analysis.gdriveLink) || `${process.env.BACKEND_URL || 'https://nda-system-dbrain.onrender.com'}/api/download/${encodeURIComponent(application.filename)}`;
   const downloadLine = `\n\n📄 [Скачать NDA](${downloadUrl})`;
   if (decision === 'approved') {
     channelMessage = `✅ *NDA СОГЛАСОВАНО*\n\n📋 *Компания:* ${escapeMarkdown(application.companyName)}\n👤 *Ответственный:* ${escapeMarkdown(application.responsible)}\n\n*Согласовал:* ${escapeMarkdown(decidedBy)}${commentSection}${downloadLine}`;
@@ -674,10 +677,27 @@ app.get('/api/download/:filename', async (req, res) => {
     try {
       await fs.access(filePath);
       console.log('Файл найден, отправляем на скачивание');
-      res.download(filePath);
+      return res.download(filePath);
     } catch (accessError) {
-      console.error('Файл не найден:', filePath);
-      res.status(404).json({ error: 'Файл не найден' });
+      console.error('Файл не найден локально:', filePath);
+      // Пытаемся найти ссылку на Google Drive
+      let gdriveLink = null;
+      for (const app of applications.values()) {
+        if (app.filename === filename && app.gdriveLink) {
+          gdriveLink = app.gdriveLink;
+          break;
+        }
+        // Иногда filename может быть в analysisResult
+        if (app.analysis && app.analysis.gdriveLink && app.analysis.filename === filename) {
+          gdriveLink = app.analysis.gdriveLink;
+          break;
+        }
+      }
+      if (gdriveLink) {
+        console.log('Редиректим на Google Drive:', gdriveLink);
+        return res.redirect(gdriveLink);
+      }
+      res.status(404).json({ error: 'Файл не найден ни локально, ни в Google Drive' });
     }
   } catch (error) {
     console.error('Ошибка скачивания:', error);
