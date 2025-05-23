@@ -357,17 +357,21 @@ ${application.analysis.criticalIssues.map(issue => `• ${escapeMarkdown(issue)}
 ${application.comment ? `*Комментарий специалиста:*
 ${escapeMarkdown(application.comment)}` : ''}`;
 
-console.log('📱 Telegram filename:', application.filename);
- const keyboard = {
-    inline_keyboard: [
-      [
-        { text: '✅ Согласовать', callback_data: `approve_${token}` },
-        { text: '❌ Отклонить', callback_data: `reject_${token}` }
-      ],
-      [
-     { text: '📄 Скачать NDA', url: `https://nda-system-dbrain.onrender.com/api/download/${application.filename}` }
-      ]
+  console.log('📱 Telegram filename:', application.filename);
+  
+  const keyboard = {
+     inline_keyboard: [
+    [
+      { text: '✅ Согласовать', callback_data: `approve_${token}` },
+      { text: '❌ Отклонить', callback_data: `reject_${token}` }
+    ],
+    [
+      { text: '⚖️ Отправить юристам', callback_data: `lawyers_${token}` }
+    ],
+    [
+      { text: '📄 Скачать NDA', url: `https://nda-system-dbrain.onrender.com/api/download/${encodeURIComponent(application.filename)}` }
     ]
+  ]
   };
 
   try {
@@ -455,6 +459,7 @@ app.post('/api/telegram-webhook', async (req, res) => {
       applications.set(token, application);
 
       await editMessageWithResult(messageData.chat.id, messageData.message_id, application, 'approved');
+      await sendDecisionToChannel(application, 'approved', from.username || from.first_name);
       await answerCallbackQuery(callbackId, '✅ NDA согласовано!');
 
     } else if (action === 'reject') {
@@ -466,9 +471,21 @@ app.post('/api/telegram-webhook', async (req, res) => {
       applications.set(token, application);
 
       await editMessageWithResult(messageData.chat.id, messageData.message_id, application, 'rejected');
+      await sendDecisionToChannel(application, 'rejected', from.username || from.first_name);
       await answerCallbackQuery(callbackId, '❌ NDA отклонено');
     }
+ else if (action === 'lawyers') {
+  console.log('⚖️ Отправляем юристам...');
+  
+  application.status = 'sent_to_lawyers';
+  application.sentBy = from.username || from.first_name;
+  application.sentAt = new Date();
+  applications.set(token, application);
 
+  await editMessageWithResult(messageData.chat.id, messageData.message_id, application, 'sent_to_lawyers');
+  await sendDecisionToChannel(application, 'sent_to_lawyers', from.username || from.first_name);
+  await answerCallbackQuery(callbackId, '⚖️ Отправлено юристам');
+}
     res.json({ ok: true });
 
   } catch (error) {
@@ -495,17 +512,13 @@ body: JSON.stringify({
 }
 
 async function editMessageWithResult(chatId, messageId, application, decision) {
-  const resultMessage = `
-✅ *Решение принято*
-
-📋 *Компания:* ${application.companyName}
-🏢 *ИНН:* ${application.inn}
-📄 *Файл:* ${application.filename}
-
-*Решение:* ${decision === 'approved' ? '✅ СОГЛАСОВАНО' : '❌ ОТКЛОНЕНО'}
-*Кем:* ${application.approvedBy || application.rejectedBy}
-*Время решения:* ${(application.approvedAt || application.rejectedAt).toLocaleString('ru-RU')}
-  `;
+    let resultMessage = '';
+  
+  if (decision === 'sent_to_lawyers') {
+    resultMessage = `⚖️ *Отправлено юристам*\n\n📋 *Компания:* ${application.companyName}\n👤 *Ответственный:* ${application.responsible || application.inn}\n\n*Решение:* ⚖️ ТРЕБУЕТ СОГЛАСОВАНИЯ С ЮРИСТАМИ\n*Кем:* ${application.sentBy}\n*Время:* ${application.sentAt.toLocaleString('ru-RU')}`;
+  } else {
+    resultMessage = `✅ *Решение принято*\n\n📋 *Компания:* ${application.companyName}\n👤 *Ответственный:* ${application.responsible || application.inn}\n\n*Решение:* ${decision === 'approved' ? '✅ СОГЛАСОВАНО' : '❌ ОТКЛОНЕНО'}\n*Кем:* ${application.approvedBy || application.rejectedBy}\n*Время:* ${(application.approvedAt || application.rejectedAt).toLocaleString('ru-RU')}`;
+  }
 
   try {
     await fetch(`${config.telegram.apiUrl}/editMessageText`, {
@@ -520,6 +533,33 @@ async function editMessageWithResult(chatId, messageId, application, decision) {
     });
   } catch (error) {
     console.error('❌ Ошибка редактирования сообщения:', error);
+  }
+}
+
+// Новая функция для отправки решения в канал
+async function sendDecisionToChannel(application, decision, decidedBy) {
+  let channelMessage = '';
+  
+  if (decision === 'approved') {
+    channelMessage = `✅ *NDA СОГЛАСОВАНО*\n\n📋 *Компания:* ${application.companyName}\n👤 *Ответственный:* ${application.responsible || application.inn}\n\n*Согласовал:* ${decidedBy}`;
+  } else if (decision === 'rejected') {
+    channelMessage = `❌ *NDA ОТКЛОНЕНО*\n\n📋 *Компания:* ${application.companyName}\n👤 *Ответственный:* ${application.responsible || application.inn}\n\n*Отклонил:* ${decidedBy}`;
+  } else if (decision === 'sent_to_lawyers') {
+    channelMessage = `⚖️ *NDA ОТПРАВЛЕНО ЮРИСТАМ*\n\n📋 *Компания:* ${application.companyName}\n👤 *Ответственный:* ${application.responsible || application.inn}\n\n*Отправил:* ${decidedBy}`;
+  }
+
+  try {
+    await fetch(`${config.telegram.apiUrl}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: '-1002634882947',
+        text: channelMessage,
+        parse_mode: 'Markdown'
+      })
+    });
+  } catch (error) {
+    console.error('Ошибка отправки в канал:', error);
   }
 }
 
