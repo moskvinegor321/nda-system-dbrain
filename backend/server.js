@@ -227,6 +227,30 @@ function analyzePDFStructure(buffer) {
   }
 }
 
+const GDRIVE_LINKS_FILE = path.join(__dirname, 'gdrive-links.json');
+let gdriveLinksMap = new Map();
+
+// Загрузка gdrive-links.json при старте
+async function loadGdriveLinks() {
+  try {
+    const data = await fs.readFile(GDRIVE_LINKS_FILE, 'utf8');
+    const arr = JSON.parse(data);
+    gdriveLinksMap = new Map(arr.map(item => [item.filename, item.gdriveLink]));
+    console.log('✅ Загружено связок filename → gdriveLink:', gdriveLinksMap.size);
+  } catch (e) {
+    console.log('ℹ️ Нет файла gdrive-links.json, создаём новый при первом сохранении');
+    gdriveLinksMap = new Map();
+  }
+}
+loadGdriveLinks();
+
+// Сохранять связку filename → gdriveLink
+async function saveGdriveLink(filename, gdriveLink) {
+  gdriveLinksMap.set(filename, gdriveLink);
+  const arr = Array.from(gdriveLinksMap.entries()).map(([filename, gdriveLink]) => ({ filename, gdriveLink }));
+  await fs.writeFile(GDRIVE_LINKS_FILE, JSON.stringify(arr, null, 2), 'utf8');
+}
+
 // ЗАМЕНИТЕ ПОЛНОСТЬЮ функцию app.post('/api/analyze-nda') в вашем server.js
 
 app.post('/api/analyze-nda', upload.single('file'), async (req, res) => {
@@ -328,6 +352,8 @@ app.post('/api/analyze-nda', upload.single('file'), async (req, res) => {
       const gdriveFile = await uploadToGoogleDrive(file.path, file.filename, file.mimetype);
       gdriveLink = gdriveFile.webViewLink;
       analysisResult.gdriveLink = gdriveLink;
+      // Сохраняем связку filename → gdriveLink
+      await saveGdriveLink(file.filename, gdriveLink);
       // Удаляем локальный файл
       await fs.unlink(file.path);
       console.log('🗑️ Локальный файл удалён после загрузки в Google Drive');
@@ -687,11 +713,14 @@ app.get('/api/download/:filename', async (req, res) => {
           gdriveLink = app.gdriveLink;
           break;
         }
-        // Иногда filename может быть в analysisResult
         if (app.analysis && app.analysis.gdriveLink && app.analysis.filename === filename) {
           gdriveLink = app.analysis.gdriveLink;
           break;
         }
+      }
+      // Если не нашли в памяти — ищем в файле
+      if (!gdriveLink && gdriveLinksMap.has(filename)) {
+        gdriveLink = gdriveLinksMap.get(filename);
       }
       if (gdriveLink) {
         console.log('Редиректим на Google Drive:', gdriveLink);
