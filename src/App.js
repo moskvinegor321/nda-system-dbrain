@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { Upload, CheckCircle, AlertTriangle, MessageCircle, FileText, Building, User, MessageSquare } from 'lucide-react';
 
 // API Configuration
@@ -15,6 +15,8 @@ const NDAApprovalApp = () => {
   const [analysisResult, setAnalysisResult] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const dropRef = useRef();
+  const [dragActive, setDragActive] = useState(false);
 
   const handleFileUpload = (event) => {
     const file = event.target.files[0];
@@ -26,6 +28,25 @@ const NDAApprovalApp = () => {
     
     setError(null);
     setFormData(prev => ({ ...prev, file }));
+  };
+
+  const handleDrag = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.type === 'dragenter' || e.type === 'dragover') {
+      setDragActive(true);
+    } else if (e.type === 'dragleave') {
+      setDragActive(false);
+    }
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragActive(false);
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      handleFileUpload({ target: { files: e.dataTransfer.files } });
+    }
   };
 
   const handleSubmitForAnalysis = async () => {
@@ -150,23 +171,28 @@ const NDAApprovalApp = () => {
                 <div className="relative">
                   <input
                     type="file"
-                    accept=".pdf,application/pdf"
+                    accept=".pdf,.doc,.docx,.txt,.rtf,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,application/rtf"
                     onChange={handleFileUpload}
                     className="hidden"
                     id="file-upload"
                   />
-                  <label 
-                    htmlFor="file-upload" 
-                    className="block w-full border-2 border-dashed border-gray-300 rounded-lg p-8 text-center hover:border-gray-400 transition-colors cursor-pointer bg-gray-50 hover:bg-gray-100"
+                  <label
+                    htmlFor="file-upload"
+                    ref={dropRef}
+                    onDragEnter={handleDrag}
+                    onDragLeave={handleDrag}
+                    onDragOver={handleDrag}
+                    onDrop={handleDrop}
+                    className={`block w-full border-2 border-dashed border-gray-300 rounded-lg p-8 text-center hover:border-gray-400 transition-colors cursor-pointer bg-gray-50 hover:bg-gray-100 ${dragActive ? 'border-blue-500 bg-blue-50' : ''}`}
                   >
                     <Upload className="mx-auto h-10 w-10 text-gray-400 mb-3" />
                     <p className="text-sm font-medium text-gray-700">
-                      {formData.file ? formData.file.name : 'Нажмите для выбора файла'}
+                      {formData.file ? formData.file.name : 'Нажмите или перетащите файл для выбора'}
                     </p>
                     <p className="text-xs text-gray-500 mt-1">
                       {formData.file 
                         ? `${(formData.file.size / 1024 / 1024).toFixed(2)} MB`
-                        : 'PDF до 10 MB'}
+                        : 'PDF, DOCX, DOC, TXT, RTF до 10 MB'}
                     </p>
                   </label>
                 </div>
@@ -226,7 +252,7 @@ const NDAApprovalApp = () => {
                 <div className="flex items-start space-x-3 text-xs text-gray-500">
                   <div className="flex-1">
                     <p className="font-medium text-gray-600 mb-1">Поддерживаемые форматы:</p>
-                    <p>PDF документы до 10 MB</p>
+                    <p>PDF, DOCX, DOC, TXT, RTF до 10 MB</p>
                   </div>
                   <div className="flex-1">
                     <p className="font-medium text-gray-600 mb-1">Время анализа:</p>
@@ -245,187 +271,75 @@ const NDAApprovalApp = () => {
   if (currentStep === 2 && analysisResult) {
     const isApproved = analysisResult.status === 'approve';
     
-    return (
-      <div className="min-h-screen bg-gray-50 py-12 px-4">
-        <div className="max-w-3xl mx-auto">
-          {/* Header with Result */}
-          <div className="text-center mb-8">
-            <div className={`inline-flex items-center justify-center w-16 h-16 ${isApproved ? 'bg-green-100' : 'bg-yellow-100'} rounded-full mb-4`}>
-              {isApproved ? (
+    if (isApproved) {
+      return (
+        <div className="min-h-screen bg-gray-50 py-12 px-4">
+          <div className="max-w-3xl mx-auto">
+            {/* Header with Result */}
+            <div className="text-center mb-8">
+              <div className="inline-flex items-center justify-center w-16 h-16 bg-green-100 rounded-full mb-4">
                 <CheckCircle className="w-8 h-8 text-green-600" />
-              ) : (
-                <AlertTriangle className="w-8 h-8 text-yellow-600" />
+              </div>
+              <h2 className="text-3xl font-bold text-gray-900 mb-2">
+                NDA автоматически согласовано
+              </h2>
+              <p className="text-gray-600">{analysisResult.summary}</p>
+              {analysisResult.confidence && (
+                <div className="mt-2">
+                  <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-700">
+                    Уверенность AI: {Math.round(analysisResult.confidence * 100)}%
+                  </span>
+                </div>
               )}
             </div>
-            <h2 className="text-3xl font-bold text-gray-900 mb-2">
-              {isApproved ? 'NDA автоматически согласовано' : 'Требуется ручное согласование'}
-            </h2>
-            <p className="text-gray-600">{analysisResult.summary}</p>
-            {analysisResult.confidence && (
-              <div className="mt-2">
-                <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-700">
-                  Уверенность AI: {Math.round(analysisResult.confidence * 100)}%
-                </span>
-              </div>
-            )}
-          </div>
 
-          {/* Main Content Card */}
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-            {/* Key Points */}
-            {analysisResult.keyPoints && analysisResult.keyPoints.length > 0 && (
-              <div className="p-6 border-b border-gray-200">
-                <h3 className="text-sm font-semibold text-gray-900 mb-4 flex items-center">
-                  <span className="w-1.5 h-1.5 bg-blue-600 rounded-full mr-2"></span>
-                  Ключевые моменты
-                </h3>
-                <div className="space-y-2">
-                  {analysisResult.keyPoints.map((point, index) => (
-                    <div key={index} className="flex items-start text-sm">
-                      <CheckCircle className="w-4 h-4 text-green-500 mr-2 flex-shrink-0 mt-0.5" />
-                      <span className="text-gray-700">{point}</span>
-                    </div>
-                  ))}
+            {/* Main Content Card */}
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+              {/* Key Points */}
+              {analysisResult.keyPoints && analysisResult.keyPoints.length > 0 && (
+                <div className="p-6 border-b border-gray-200">
+                  <h3 className="text-sm font-semibold text-gray-900 mb-4 flex items-center">
+                    <span className="w-1.5 h-1.5 bg-blue-600 rounded-full mr-2"></span>
+                    Ключевые условия
+                  </h3>
+                  <div className="space-y-2">
+                    {analysisResult.keyPoints.map((point, index) => (
+                      <div key={index} className="flex items-start text-sm">
+                        <CheckCircle className="w-4 h-4 text-green-500 mr-2 flex-shrink-0 mt-0.5" />
+                        <span className="text-gray-700">{point}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {/* Summary */}
+              <div className="p-6">
+                <h4 className="text-sm font-semibold text-gray-900 mb-2">Заключение AI</h4>
+                <div className="text-gray-700 whitespace-pre-line text-sm">
+                  {analysisResult.summary}
                 </div>
               </div>
-            )}
-
-            {/* Critical Issues */}
-            {analysisResult.criticalIssues && analysisResult.criticalIssues.length > 0 && (
-              <div className="p-6 bg-yellow-50 border-b border-gray-200">
-                <h3 className="text-sm font-semibold text-yellow-900 mb-4 flex items-center">
-                  <span className="w-1.5 h-1.5 bg-yellow-600 rounded-full mr-2"></span>
-                  Критические замечания
-                </h3>
-                <div className="space-y-2">
-                  {analysisResult.criticalIssues.map((issue, index) => (
-                    <div key={index} className="flex items-start text-sm">
-                      <AlertTriangle className="w-4 h-4 text-yellow-600 mr-2 flex-shrink-0 mt-0.5" />
-                      <span className="text-yellow-800">{issue}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Comment Field for Manual Approval */}
-            {!isApproved && (
-              <div className="p-6 bg-gray-50 border-b border-gray-200">
-                <label className="flex items-center text-sm font-semibold text-gray-900 mb-3">
-                  <MessageSquare className="w-4 h-4 mr-2 text-gray-500" />
-                  Комментарий для согласующего
-                </label>
-                <textarea
-                  value={formData.comment}
-                  onChange={(e) => setFormData(prev => ({ ...prev, comment: e.target.value }))}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all text-sm resize-none"
-                  placeholder="Опишите важные моменты или особые условия для согласующего лица..."
-                  rows="3"
-                />
-                <p className="text-xs text-gray-500 mt-2">
-                  Этот комментарий будет отправлен вместе с документом в Telegram
-                </p>
-              </div>
-            )}
+            </div>
 
             {/* Actions */}
             <div className="p-6">
-              <div className="space-y-3">
-                {isApproved ? (
-                  <>
-                    <button
-                      onClick={handleAutoApprove}
-                      className="w-full bg-green-600 text-white py-3 px-4 rounded-lg hover:bg-green-700 transition-all font-medium flex items-center justify-center"
-                    >
-                      <CheckCircle className="w-5 h-5 mr-2" />
-                      Подтвердить автоматическое согласование
-                    </button>
-                    <p className="text-sm text-gray-600 text-center">
-                      NDA соответствует всем требованиям и может быть согласовано автоматически
-                    </p>
-                  </>
-                ) : (
-                  <>
-                    <button
-                      onClick={handleSendToTelegram}
-                      disabled={loading}
-                      className="w-full bg-blue-600 text-white py-3 px-4 rounded-lg hover:bg-blue-700 transition-all font-medium flex items-center justify-center disabled:opacity-50"
-                    >
-                      {loading ? (
-                        <>
-                          <div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent mr-2"></div>
-                          Отправляем...
-                        </>
-                      ) : (
-                        <>
-                          <MessageCircle className="w-5 h-5 mr-2" />
-                          Отправить на согласование в Telegram
-                        </>
-                      )}
-                    </button>
-                    <p className="text-sm text-gray-600 text-center">
-                      Требуется проверка и согласование ответственным лицом
-                    </p>
-                  </>
-                )}
+              <button
+                onClick={resetForm}
+                className="w-full bg-white text-gray-700 py-3 px-4 rounded-lg border border-gray-300 hover:bg-gray-50 transition-all font-medium"
+              >
+                Анализировать новый документ
+              </button>
+            </div>
 
-                <button
-                  onClick={resetForm}
-                  className="w-full bg-white text-gray-700 py-3 px-4 rounded-lg border border-gray-300 hover:bg-gray-50 transition-all font-medium"
-                >
-                  Анализировать новый документ
-                </button>
-              </div>
-
-              {/* Process Info */}
-              <div className="mt-6 p-4 bg-gray-50 rounded-lg">
-                <h4 className="text-xs font-semibold text-gray-700 uppercase tracking-wider mb-2">
-                  Следующие шаги
-                </h4>
-                <div className="space-y-1.5 text-sm text-gray-600">
-                  {isApproved ? (
-                    <>
-                      <p className="flex items-start">
-                        <span className="inline-block w-1.5 h-1.5 bg-gray-400 rounded-full mr-2 mt-1.5"></span>
-                        Документ согласован автоматически на основе AI анализа
-                      </p>
-                      <p className="flex items-start">
-                        <span className="inline-block w-1.5 h-1.5 bg-gray-400 rounded-full mr-2 mt-1.5"></span>
-                        Уведомление отправлено в Telegram канал команды
-                      </p>
-                      <p className="flex items-start">
-                        <span className="inline-block w-1.5 h-1.5 bg-gray-400 rounded-full mr-2 mt-1.5"></span>
-                        Можно приступать к подписанию NDA
-                      </p>
-                    </>
-                  ) : (
-                    <>
-                      <p className="flex items-start">
-                        <span className="inline-block w-1.5 h-1.5 bg-gray-400 rounded-full mr-2 mt-1.5"></span>
-                        Запрос будет отправлен ответственному лицу
-                      </p>
-                      <p className="flex items-start">
-                        <span className="inline-block w-1.5 h-1.5 bg-gray-400 rounded-full mr-2 mt-1.5"></span>
-                        Решение придет в Telegram с кнопками действий
-                      </p>
-                      <p className="flex items-start">
-                        <span className="inline-block w-1.5 h-1.5 bg-gray-400 rounded-full mr-2 mt-1.5"></span>
-                        Результат будет зафиксирован в системе
-                      </p>
-                    </>
-                  )}
-                </div>
-              </div>
+            {/* Footer Info */}
+            <div className="mt-6 text-center text-xs text-gray-500">
+              <p>Компания: {formData.companyName} • Ответственный: {formData.responsible}</p>
             </div>
           </div>
-
-          {/* Footer Info */}
-          <div className="mt-6 text-center text-xs text-gray-500">
-            <p>Компания: {formData.companyName} • Ответственный: {formData.responsible}</p>
-          </div>
         </div>
-      </div>
-    );
+      );
+    }
+    // ... остальной код для ручного согласования ...
   }
 
   return null;

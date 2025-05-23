@@ -37,10 +37,19 @@ const upload = multer({
   storage,
   limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
   fileFilter: (req, file, cb) => {
-    if (file.mimetype === 'application/pdf' || file.originalname.toLowerCase().endsWith('.pdf')) {
+    const allowed = [
+      'application/pdf',
+      'application/msword',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'text/plain',
+      'application/rtf'
+    ];
+    const extAllowed = ['.pdf', '.doc', '.docx', '.txt', '.rtf'];
+    const ext = file.originalname.toLowerCase().slice(file.originalname.lastIndexOf('.'));
+    if (allowed.includes(file.mimetype) || extAllowed.includes(ext)) {
       cb(null, true);
     } else {
-      cb(new Error('Только PDF файлы разрешены'), false);
+      cb(new Error('Только PDF, DOCX, DOC, TXT, RTF файлы разрешены'), false);
     }
   }
 });
