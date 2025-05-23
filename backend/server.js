@@ -449,7 +449,7 @@ ${escapeMarkdown(application.comment)}` : ''}`;
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        chat_id: config.telegram.channelId,
+        chat_id: config.telegram.chatId,
         text: message,
         parse_mode: 'Markdown',
         reply_markup: keyboard
