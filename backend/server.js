@@ -364,7 +364,7 @@ ${escapeMarkdown(application.comment)}` : ''}`;
         { text: '❌ Отклонить', callback_data: `reject_${token}` }
       ],
       [
-        { text: '📄 Скачать NDA', url: `https://nda-system-dbrain.onrender.com/api/download/${application.filename}` }
+      { text: '📄 Скачать NDA', url: `https://nda-system-dbrain.onrender.com/api/download/${application.filename}` }
       ]
     ]
   };
@@ -482,11 +482,11 @@ async function answerCallbackQuery(callbackQueryId, text) {
     await fetch(`${config.telegram.apiUrl}/answerCallbackQuery`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        callback_query_id: callbackQueryId,
-        text: text,
-        show_alert: false
-      })
+body: JSON.stringify({
+  callback_query_id: callbackQueryId,
+  text: text,
+  show_alert: false
+})
     });
   } catch (error) {
     console.error('❌ Ошибка ответа на callback:', error);
