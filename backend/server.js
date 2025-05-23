@@ -435,22 +435,18 @@ async function sendTelegramApprovalRequest(application) {
   // --- Кнопка скачивания ---
   let downloadUrl = application.gdriveLink || (application.analysis && application.analysis.gdriveLink) || `${process.env.BACKEND_URL || 'https://nda-system-dbrain.onrender.com'}/api/download/${encodeURIComponent(application.filename)}`;
 
-  const message = `🔔 *Требуется согласование NDA*
+  // Формируем блок ключевых условий
+  let keyPointsBlock = '';
+  if (application.analysis && Array.isArray(application.analysis.keyPoints) && application.analysis.keyPoints.length > 0) {
+    keyPointsBlock = '\n\n*Ключевые условия:*\n' + application.analysis.keyPoints.map(point => `• ${escapeMarkdown(point)}`).join('\n');
+  }
+  // Формируем блок заключения AI
+  let summaryBlock = '';
+  if (application.analysis && application.analysis.summary) {
+    summaryBlock = `\n\n*Заключение AI:*\n${escapeMarkdown(application.analysis.summary)}`;
+  }
 
-📋 *Компания:* ${escapeMarkdown(application.companyName)}
-👤 *Ответственный:* ${escapeMarkdown(application.responsible)}
-📅 *Дата:* ${escapeMarkdown(new Date().toLocaleString('ru-RU'))}
-📄 *Файл:* ${escapeMarkdown(application.filename)}
-
-*Заключение AI:*
-${escapeMarkdown(application.analysis.summary || 'Анализ завершен')}
-
-${application.analysis.criticalIssues && application.analysis.criticalIssues.length > 0 ? 
-`*Критические замечания:*
-${application.analysis.criticalIssues.map(issue => `• ${escapeMarkdown(issue)}`).join('\n')}` : ''}
-
-${application.comment ? `*Комментарий специалиста:*
-${escapeMarkdown(application.comment)}` : ''}`;
+  const message = `🔔 *Требуется согласование NDA*\n\n📋 *Компания:* ${escapeMarkdown(application.companyName)}\n👤 *Ответственный:* ${escapeMarkdown(application.responsible)}\n📅 *Дата:* ${escapeMarkdown(new Date().toLocaleString('ru-RU'))}\n📄 *Файл:* ${escapeMarkdown(application.filename)}${keyPointsBlock}${summaryBlock}\n\n${application.analysis.criticalIssues && application.analysis.criticalIssues.length > 0 ? `*Критические замечания:*\n${application.analysis.criticalIssues.map(issue => `• ${escapeMarkdown(issue)}`).join('\n')}` : ''}\n\n${application.comment ? `*Комментарий специалиста:*\n${escapeMarkdown(application.comment)}` : ''}`;
 
   console.log('📱 Telegram filename:', application.filename);
   console.log('🔑 Short ID length:', Buffer.byteLength(`approve_${shortId}`, 'utf8'), 'bytes');
@@ -667,12 +663,22 @@ async function sendDecisionToChannel(application, decision, decidedBy) {
   // Формируем ссылку на скачивание
   let downloadUrl = application.gdriveLink || (application.analysis && application.analysis.gdriveLink) || `${process.env.BACKEND_URL || 'https://nda-system-dbrain.onrender.com'}/api/download/${encodeURIComponent(application.filename)}`;
   const downloadLine = `\n\n📄 [Скачать NDA](${downloadUrl})`;
+  // Формируем блок ключевых условий
+  let keyPointsBlock = '';
+  if (application.analysis && Array.isArray(application.analysis.keyPoints) && application.analysis.keyPoints.length > 0) {
+    keyPointsBlock = '\n\n*Ключевые условия:*\n' + application.analysis.keyPoints.map(point => `• ${escapeMarkdown(point)}`).join('\n');
+  }
+  // Формируем блок заключения AI
+  let summaryBlock = '';
+  if (application.analysis && application.analysis.summary) {
+    summaryBlock = `\n\n*Заключение AI:*\n${escapeMarkdown(application.analysis.summary)}`;
+  }
   if (decision === 'approved') {
-    channelMessage = `✅ *NDA СОГЛАСОВАНО*\n\n📋 *Компания:* ${escapeMarkdown(application.companyName)}\n👤 *Ответственный:* ${escapeMarkdown(application.responsible)}\n\n*Согласовал:* ${escapeMarkdown(decidedBy)}${commentSection}${downloadLine}`;
+    channelMessage = `✅ *NDA СОГЛАСОВАНО*\n\n📋 *Компания:* ${escapeMarkdown(application.companyName)}\n👤 *Ответственный:* ${escapeMarkdown(application.responsible)}${keyPointsBlock}${summaryBlock}\n\n*Согласовал:* ${escapeMarkdown(decidedBy)}${commentSection}${downloadLine}`;
   } else if (decision === 'rejected') {
-    channelMessage = `❌ *NDA ОТКЛОНЕНО*\n\n📋 *Компания:* ${escapeMarkdown(application.companyName)}\n👤 *Ответственный:* ${escapeMarkdown(application.responsible)}\n\n*Отклонил:* ${escapeMarkdown(decidedBy)}${commentSection}${downloadLine}`;
+    channelMessage = `❌ *NDA ОТКЛОНЕНО*\n\n📋 *Компания:* ${escapeMarkdown(application.companyName)}\n👤 *Ответственный:* ${escapeMarkdown(application.responsible)}${keyPointsBlock}${summaryBlock}\n\n*Отклонил:* ${escapeMarkdown(decidedBy)}${commentSection}${downloadLine}`;
   } else if (decision === 'sent_to_lawyers') {
-    channelMessage = `⚖️ *NDA ОТПРАВЛЕНО ЮРИСТАМ*\n\n📋 *Компания:* ${escapeMarkdown(application.companyName)}\n👤 *Ответственный:* ${escapeMarkdown(application.responsible)}\n\n*Отправил:* ${escapeMarkdown(decidedBy)}${commentSection}${downloadLine}`;
+    channelMessage = `⚖️ *NDA ОТПРАВЛЕНО ЮРИСТАМ*\n\n📋 *Компания:* ${escapeMarkdown(application.companyName)}\n👤 *Ответственный:* ${escapeMarkdown(application.responsible)}${keyPointsBlock}${summaryBlock}\n\n*Отправил:* ${escapeMarkdown(decidedBy)}${commentSection}${downloadLine}`;
   }
   try {
     console.log('📤 Отправляем сообщение в канал...');
