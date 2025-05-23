@@ -363,12 +363,8 @@ ${escapeMarkdown(application.comment)}` : ''}`;
      inline_keyboard: [
     [
       { text: '✅ Согласовать', callback_data: `approve_${token}` },
-      { text: '❌ Отклонить', callback_data: `reject_${token}` }
-    ],
-    [
-      { text: '⚖️ Отправить юристам', callback_data: `lawyers_${token}` }
-    ],
-    [
+      { text: '❌ Отклонить', callback_data: `reject_${token}` },
+      { text: '⚖️ Отправить юристам', callback_data: `lawyers_${token}` },
       { text: '📄 Скачать NDA', url: `https://nda-system-dbrain.onrender.com/api/download/${encodeURIComponent(application.filename)}` }
     ]
   ]
