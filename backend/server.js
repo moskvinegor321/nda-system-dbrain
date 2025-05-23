@@ -283,12 +283,12 @@ app.post('/api/analyze-nda', upload.single('file'), async (req, res) => {
     });
     
     // Удаляем временный файл
-    try {
-      await fs.unlink(file.path);
-      console.log('🗑️ Временный файл удален');
-    } catch (unlinkError) {
-      console.log('⚠️ Не удалось удалить временный файл:', unlinkError.message);
-    }
+    // try {
+    //   await fs.unlink(file.path);
+    //   console.log('🗑️ Временный файл удален');
+    // } catch (unlinkError) {
+    //   console.log('⚠️ Не удалось удалить временный файл:', unlinkError.message);
+    // }
     
     // Возвращаем результат на фронтенд
     res.json(analysisResult);
@@ -476,7 +476,10 @@ app.post('/api/telegram-webhook', async (req, res) => {
     if (companyMatch) application.companyName = companyMatch[1].trim();
     if (responsibleMatch) application.responsible = responsibleMatch[1].trim();
     if (fileMatch) application.filename = fileMatch[1].trim();
-    if (commentMatch) application.comment = commentMatch[1].trim();
+    if (commentMatch) {
+      application.comment = commentMatch[1].trim();
+      console.log('💬 Извлечён комментарий для канала:', application.comment);
+    }
 
     if (action === 'approve') {
       console.log('✅ Обрабатываем согласование...');
