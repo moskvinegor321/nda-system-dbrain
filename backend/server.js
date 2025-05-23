@@ -382,12 +382,12 @@ ${escapeMarkdown(application.comment)}` : ''}`;
   const keyboard = {
     inline_keyboard: [
       [
-        { text: '✅ Согласовать', callback_data: `approve_${shortId}` },
-        { text: '❌ Отклонить', callback_data: `reject_${shortId}` }
+        { text: '✅ Согласовать', callback_data: String(`approve_${shortId}`) },
+        { text: '❌ Отклонить', callback_data: String(`reject_${shortId}`) }
       ],
       [
-        { text: '⚖️ Отправить юристам', callback_data: `lawyers_${shortId}` },
-        { text: '📄 Скачать NDA', url: `${process.env.BACKEND_URL || 'https://nda-system-dbrain.onrender.com'}/api/download/${encodeURIComponent(application.filename)}` }
+        { text: '⚖️ Отправить юристам', callback_data: String(`lawyers_${shortId}`) },
+        { text: '📄 Скачать NDA', url: String(`${process.env.BACKEND_URL || 'https://nda-system-dbrain.onrender.com'}/api/download/${encodeURIComponent(application.filename)}`) }
       ]
     ]
   };
