@@ -397,17 +397,11 @@ ${escapeMarkdown(application.comment)}` : ''}`;
 }
 
 // Webhook для Telegram - обработка ответов на согласование
-app.post('/api/telegram-webhook', express.raw({type: 'application/json'}), async (req, res) => {
+app.post('/api/telegram-webhook', async (req, res) => {
   try {
     console.log('📨 Получен Telegram webhook');
     
-    let body;
-    try {
-      body = JSON.parse(req.body.toString());
-    } catch (parseError) {
-      console.error('❌ Ошибка парсинга JSON:', parseError);
-      return res.json({ ok: true });
-    }
+ const body = req.body;
 
     const { callback_query } = body;
     
