@@ -6,6 +6,7 @@ const fs = require('fs').promises;
 const path = require('path');
 const pdfParse = require('pdf-parse');
 const crypto = require('crypto');
+const mammoth = require('mammoth');
 
 console.log('🚀 Запуск сервера NDA анализа...');
 console.log('N8N_WEBHOOK_URL:', process.env.N8N_WEBHOOK_URL);
@@ -16,10 +17,7 @@ console.log('PORT:', process.env.PORT);
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-app.use(cors({
-  origin: ['https://nda-analyzer-dbrain.netlify.app', 'http://localhost:3000'],
-  credentials: true
-}));
+app.use(cors());
 app.use(express.json());
 
 // Настройка загрузки файлов
@@ -84,6 +82,29 @@ if (!config.telegram.chatId) {
 }
 if (!config.telegram.channelId) {
   console.error('❌ TELEGRAM_CHANNEL_ID не установлен!');
+}
+
+// Улучшенная функция извлечения текста с поддержкой PDF, DOCX, DOC, TXT, RTF
+async function extractTextSmart(filePath, mimeType, ext) {
+  try {
+    console.log('📄 Начинаем извлечение текста из:', filePath, 'mime:', mimeType, 'ext:', ext);
+    if (mimeType.includes('pdf') || ext === '.pdf') {
+      return await extractTextFromPDF(filePath);
+    } else if (mimeType.includes('word') || ext === '.docx' || ext === '.doc') {
+      // DOCX/DOC
+      const result = await mammoth.extractRawText({ path: filePath });
+      return result.value;
+    } else if (mimeType.includes('text') || ext === '.txt' || ext === '.rtf') {
+      // TXT/RTF
+      const buffer = await fs.readFile(filePath);
+      return buffer.toString('utf8');
+    } else {
+      throw new Error('Неподдерживаемый формат файла');
+    }
+  } catch (error) {
+    console.error('❌ Ошибка извлечения текста:', error.message);
+    throw error;
+  }
 }
 
 // Улучшенная функция извлечения текста с поддержкой подписанных PDF
@@ -223,16 +244,16 @@ app.post('/api/analyze-nda', upload.single('file'), async (req, res) => {
       return res.status(400).json({ error: 'Не все поля заполнены' });
     }
 
-    // ВАЖНО: Извлекаем текст из PDF ПЕРЕД отправкой в N8N
+    // ВАЖНО: Извлекаем текст из файла ПЕРЕД отправкой в N8N
     let extractedText;
     try {
-      extractedText = await extractTextFromPDF(file.path);
+      extractedText = await extractTextSmart(file.path, file.mimetype, file.originalname.toLowerCase().slice(file.originalname.lastIndexOf('.')));
       console.log('📝 Текст извлечен, длина:', extractedText.length);
       console.log('📄 Первые 200 символов:', extractedText.substring(0, 200));
     } catch (error) {
-      console.error('💥 Ошибка извлечения PDF:', error.message);
+      console.error('💥 Ошибка извлечения текста:', error.message);
       return res.status(400).json({
-        error: 'Не удалось извлечь текст из PDF',
+        error: 'Не удалось извлечь текст из файла',
         details: error.message
       });
     }
