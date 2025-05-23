@@ -26,7 +26,9 @@ const storage = multer.diskStorage({
   destination: 'uploads/',
   filename: (req, file, cb) => {
     const timestamp = Date.now();
-    cb(null, `${timestamp}-${file.originalname}`);
+    const sanitizedFilename = Buffer.from(file.originalname, 'latin1').toString('utf8')
+      .replace(/[^a-zA-Z0-9а-яА-ЯёЁ\-_\.]/g, '_');
+    cb(null, `${timestamp}-${sanitizedFilename}`);
   }
 });
 
@@ -360,14 +362,16 @@ ${escapeMarkdown(application.comment)}` : ''}`;
   console.log('📱 Telegram filename:', application.filename);
   
   const keyboard = {
-     inline_keyboard: [
-    [
-      { text: '✅ Согласовать', callback_data: `approve_${token}` },
-      { text: '❌ Отклонить', callback_data: `reject_${token}` },
-      { text: '⚖️ Отправить юристам', callback_data: `lawyers_${token}` },
-      { text: '📄 Скачать NDA', url: `https://nda-system-dbrain.onrender.com/api/download/${encodeURIComponent(application.filename)}` }
+    inline_keyboard: [
+      [
+        { text: '✅ Согласовать', callback_data: `approve_${token}` },
+        { text: '❌ Отклонить', callback_data: `reject_${token}` }
+      ],
+      [
+        { text: '⚖️ Отправить юристам', callback_data: `lawyers_${token}` },
+        { text: '📄 Скачать NDA', url: `https://nda-system-dbrain.onrender.com/api/download/${encodeURIComponent(application.filename)}` }
+      ]
     ]
-  ]
   };
 
   try {
@@ -536,12 +540,14 @@ async function editMessageWithResult(chatId, messageId, application, decision) {
 async function sendDecisionToChannel(application, decision, decidedBy) {
   let channelMessage = '';
   
+  const commentSection = application.comment ? `\n\n💬 *Комментарий:*\n${application.comment}` : '';
+  
   if (decision === 'approved') {
-    channelMessage = `✅ *NDA СОГЛАСОВАНО*\n\n📋 *Компания:* ${application.companyName}\n👤 *Ответственный:* ${application.responsible || application.inn}\n\n*Согласовал:* ${decidedBy}`;
+    channelMessage = `✅ *NDA СОГЛАСОВАНО*\n\n📋 *Компания:* ${application.companyName}\n👤 *Ответственный:* ${application.responsible || application.inn}\n\n*Согласовал:* ${decidedBy}${commentSection}`;
   } else if (decision === 'rejected') {
-    channelMessage = `❌ *NDA ОТКЛОНЕНО*\n\n📋 *Компания:* ${application.companyName}\n👤 *Ответственный:* ${application.responsible || application.inn}\n\n*Отклонил:* ${decidedBy}`;
+    channelMessage = `❌ *NDA ОТКЛОНЕНО*\n\n📋 *Компания:* ${application.companyName}\n👤 *Ответственный:* ${application.responsible || application.inn}\n\n*Отклонил:* ${decidedBy}${commentSection}`;
   } else if (decision === 'sent_to_lawyers') {
-    channelMessage = `⚖️ *NDA ОТПРАВЛЕНО ЮРИСТАМ*\n\n📋 *Компания:* ${application.companyName}\n👤 *Ответственный:* ${application.responsible || application.inn}\n\n*Отправил:* ${decidedBy}`;
+    channelMessage = `⚖️ *NDA ОТПРАВЛЕНО ЮРИСТАМ*\n\n📋 *Компания:* ${application.companyName}\n👤 *Ответственный:* ${application.responsible || application.inn}\n\n*Отправил:* ${decidedBy}${commentSection}`;
   }
 
   try {
