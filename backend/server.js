@@ -5,6 +5,7 @@ const cors = require('cors');
 const fs = require('fs').promises;
 const path = require('path');
 const pdfParse = require('pdf-parse');
+const crypto = require('crypto');
 
 console.log('🚀 Запуск сервера NDA анализа...');
 console.log('N8N_WEBHOOK_URL:', process.env.N8N_WEBHOOK_URL);
@@ -46,6 +47,14 @@ const upload = multer({
 
 // Хранение заявок на согласование
 const applications = new Map();
+
+// Хранилище для маппинга коротких ID к полным токенам
+const tokenMap = new Map();
+
+// Функция для генерации короткого ID
+function generateShortId() {
+  return crypto.randomBytes(4).toString('hex'); // 8 символов
+}
 
 // Конфигурация
 const config = {
@@ -327,13 +336,18 @@ app.post('/api/send-approval-request', async (req, res) => {
   }
 });
 
-// Функция отправки сообщения в Telegram с кнопками (для критичных NDA)
+// Функция отправки сообщения в Telegram с кнопками
 async function sendTelegramApprovalRequest(application) {
   const token = Math.random().toString(36).substring(2, 15);
+  const shortId = generateShortId();
+  
+  // Сохраняем маппинг shortId -> token
+  tokenMap.set(shortId, token);
   
   applications.set(token, {
     ...application,
     token: token,
+    shortId: shortId,
     status: 'pending_approval',
     createdAt: new Date()
   });
@@ -360,15 +374,16 @@ ${application.comment ? `*Комментарий специалиста:*
 ${escapeMarkdown(application.comment)}` : ''}`;
 
   console.log('📱 Telegram filename:', application.filename);
+  console.log('🔑 Short ID length:', Buffer.byteLength(`approve_${shortId}`, 'utf8'), 'bytes');
   
   const keyboard = {
     inline_keyboard: [
       [
-        { text: '✅ Согласовать', callback_data: `approve_${token}` },
-        { text: '❌ Отклонить', callback_data: `reject_${token}` }
+        { text: '✅ Согласовать', callback_data: `approve_${shortId}` },
+        { text: '❌ Отклонить', callback_data: `reject_${shortId}` }
       ],
       [
-        { text: '⚖️ Отправить юристам', callback_data: `lawyers_${token}` },
+        { text: '⚖️ Отправить юристам', callback_data: `lawyers_${shortId}` },
         { text: '📄 Скачать NDA', url: `https://nda-system-dbrain.onrender.com/api/download/${encodeURIComponent(application.filename)}` }
       ]
     ]
@@ -404,13 +419,12 @@ ${escapeMarkdown(application.comment)}` : ''}`;
   }
 }
 
-// Webhook для Telegram - обработка ответов на согласование
+// Обновляем обработчик webhook для работы с короткими ID
 app.post('/api/telegram-webhook', async (req, res) => {
   try {
     console.log('📨 Получен Telegram webhook');
     
- const body = req.body;
-
+    const body = req.body;
     const { callback_query } = body;
     
     if (!callback_query) {
@@ -430,14 +444,21 @@ app.post('/api/telegram-webhook', async (req, res) => {
       return res.json({ ok: true });
     }
 
-    const [action, token] = data.split('_');
+    const [action, shortId] = data.split('_');
+    const token = tokenMap.get(shortId);
     
-  // Создаем минимальный объект application из данных сообщения
-    const application = {
+    if (!token) {
+      console.log('⚠️ Токен не найден для shortId:', shortId);
+      await answerCallbackQuery(callbackId, 'Ошибка: действие устарело');
+      return res.json({ ok: true });
+    }
+
+    const application = applications.get(token) || {
       token: token,
       companyName: 'Неизвестно',
       inn: 'Неизвестно',
-      filename: 'Неизвестно'
+      filename: 'Неизвестно',
+      comment: ''
     };
     
     // Пытаемся извлечь данные из текста сообщения
@@ -445,10 +466,12 @@ app.post('/api/telegram-webhook', async (req, res) => {
     const companyMatch = messageText.match(/Компания:\s*(.+)/);
     const innMatch = messageText.match(/ИНН:\s*(.+)/);
     const fileMatch = messageText.match(/Файл:\s*(.+)/);
+    const commentMatch = messageText.match(/Комментарий специалиста:\s*([^]*?)(?=\n\n|\n*$)/);
     
     if (companyMatch) application.companyName = companyMatch[1].trim();
     if (innMatch) application.inn = innMatch[1].trim();
     if (fileMatch) application.filename = fileMatch[1].trim();
+    if (commentMatch) application.comment = commentMatch[1].trim();
 
     if (action === 'approve') {
       console.log('✅ Обрабатываем согласование...');
@@ -473,19 +496,22 @@ app.post('/api/telegram-webhook', async (req, res) => {
       await editMessageWithResult(messageData.chat.id, messageData.message_id, application, 'rejected');
       await sendDecisionToChannel(application, 'rejected', from.username || from.first_name);
       await answerCallbackQuery(callbackId, '❌ NDA отклонено');
-    }
- else if (action === 'lawyers') {
-  console.log('⚖️ Отправляем юристам...');
-  
-  application.status = 'sent_to_lawyers';
-  application.sentBy = from.username || from.first_name;
-  application.sentAt = new Date();
-  applications.set(token, application);
+    } else if (action === 'lawyers') {
+      console.log('⚖️ Отправляем юристам...');
+      
+      application.status = 'sent_to_lawyers';
+      application.sentBy = from.username || from.first_name;
+      application.sentAt = new Date();
+      applications.set(token, application);
 
-  await editMessageWithResult(messageData.chat.id, messageData.message_id, application, 'sent_to_lawyers');
-  await sendDecisionToChannel(application, 'sent_to_lawyers', from.username || from.first_name);
-  await answerCallbackQuery(callbackId, '⚖️ Отправлено юристам');
-}
+      await editMessageWithResult(messageData.chat.id, messageData.message_id, application, 'sent_to_lawyers');
+      await sendDecisionToChannel(application, 'sent_to_lawyers', from.username || from.first_name);
+      await answerCallbackQuery(callbackId, '⚖️ Отправлено юристам');
+    }
+
+    // Очищаем маппинг после использования
+    tokenMap.delete(shortId);
+    
     res.json({ ok: true });
 
   } catch (error) {
@@ -540,28 +566,37 @@ async function editMessageWithResult(chatId, messageId, application, decision) {
 async function sendDecisionToChannel(application, decision, decidedBy) {
   let channelMessage = '';
   
-  const commentSection = application.comment ? `\n\n💬 *Комментарий:*\n${application.comment}` : '';
+  // Экранируем специальные символы Markdown
+  const escapeMarkdown = (text) => {
+    return text ? text.replace(/[_*[\]()~`>#+=|{}.!-]/g, '\\$&') : '';
+  };
+  
+  const commentSection = application.comment ? 
+    `\n\n💬 *Комментарий:*\n${escapeMarkdown(application.comment)}` : '';
   
   if (decision === 'approved') {
-    channelMessage = `✅ *NDA СОГЛАСОВАНО*\n\n📋 *Компания:* ${application.companyName}\n👤 *Ответственный:* ${application.responsible || application.inn}\n\n*Согласовал:* ${decidedBy}${commentSection}`;
+    channelMessage = `✅ *NDA СОГЛАСОВАНО*\n\n📋 *Компания:* ${escapeMarkdown(application.companyName)}\n👤 *Ответственный:* ${escapeMarkdown(application.responsible || application.inn)}\n\n*Согласовал:* ${escapeMarkdown(decidedBy)}${commentSection}`;
   } else if (decision === 'rejected') {
-    channelMessage = `❌ *NDA ОТКЛОНЕНО*\n\n📋 *Компания:* ${application.companyName}\n👤 *Ответственный:* ${application.responsible || application.inn}\n\n*Отклонил:* ${decidedBy}${commentSection}`;
+    channelMessage = `❌ *NDA ОТКЛОНЕНО*\n\n📋 *Компания:* ${escapeMarkdown(application.companyName)}\n👤 *Ответственный:* ${escapeMarkdown(application.responsible || application.inn)}\n\n*Отклонил:* ${escapeMarkdown(decidedBy)}${commentSection}`;
   } else if (decision === 'sent_to_lawyers') {
-    channelMessage = `⚖️ *NDA ОТПРАВЛЕНО ЮРИСТАМ*\n\n📋 *Компания:* ${application.companyName}\n👤 *Ответственный:* ${application.responsible || application.inn}\n\n*Отправил:* ${decidedBy}${commentSection}`;
+    channelMessage = `⚖️ *NDA ОТПРАВЛЕНО ЮРИСТАМ*\n\n📋 *Компания:* ${escapeMarkdown(application.companyName)}\n👤 *Ответственный:* ${escapeMarkdown(application.responsible || application.inn)}\n\n*Отправил:* ${escapeMarkdown(decidedBy)}${commentSection}`;
   }
 
   try {
+    console.log('📤 Отправляем сообщение в канал...');
+    console.log('💬 Комментарий:', application.comment || 'нет');
+    
     await fetch(`${config.telegram.apiUrl}/sendMessage`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        chat_id: '-1002634882947',
+        chat_id: config.telegram.channelId,
         text: channelMessage,
         parse_mode: 'Markdown'
       })
     });
   } catch (error) {
-    console.error('Ошибка отправки в канал:', error);
+    console.error('❌ Ошибка отправки в канал:', error);
   }
 }
 
