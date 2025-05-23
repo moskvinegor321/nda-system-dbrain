@@ -342,7 +342,10 @@ async function sendTelegramApprovalRequest(application) {
   const shortId = generateShortId();
   
   // Сохраняем маппинг shortId -> token
-  tokenMap.set(shortId, token);
+  tokenMap.set(shortId, {
+    token: token,
+    createdAt: Date.now()
+  });
   
   applications.set(token, {
     ...application,
@@ -509,8 +512,18 @@ app.post('/api/telegram-webhook', async (req, res) => {
       await answerCallbackQuery(callbackId, '⚖️ Отправлено юристам');
     }
 
-    // Очищаем маппинг после использования
-    tokenMap.delete(shortId);
+    // Добавляем функцию очистки старых токенов
+    function cleanupOldTokens() {
+      const now = Date.now();
+      for (const [shortId, data] of tokenMap.entries()) {
+        if (now - data.createdAt > 24 * 60 * 60 * 1000) { // 24 часа
+          tokenMap.delete(shortId);
+        }
+      }
+    }
+
+    // Запускаем очистку старых токенов каждый час
+    setInterval(cleanupOldTokens, 60 * 60 * 1000);
     
     res.json({ ok: true });
 
