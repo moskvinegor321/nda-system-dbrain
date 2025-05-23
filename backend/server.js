@@ -283,6 +283,16 @@ app.post('/api/analyze-nda', upload.single('file'), async (req, res) => {
 
     // Получаем результат анализа
     const analysisResult = await n8nResponse.json();
+
+    // Гарантируем, что status всегда есть
+    if (!analysisResult.status) {
+      if (typeof analysisResult.text === 'string' && /автоматически согласовано/i.test(analysisResult.text)) {
+        analysisResult.status = 'approved';
+        analysisResult.summary = analysisResult.text;
+      }
+      // Можно добавить другие эвристики для других статусов
+    }
+
     console.log('✅ Анализ завершен:', analysisResult.status);
     console.log('📊 Результат:', {
       status: analysisResult.status,
