@@ -7,6 +7,7 @@ const path = require('path');
 const pdfParse = require('pdf-parse');
 const crypto = require('crypto');
 const mammoth = require('mammoth');
+const { uploadToGoogleDrive } = require('./google-drive');
 
 console.log('🚀 Запуск сервера NDA анализа...');
 console.log('N8N_WEBHOOK_URL:', process.env.N8N_WEBHOOK_URL);
@@ -322,13 +323,18 @@ app.post('/api/analyze-nda', upload.single('file'), async (req, res) => {
       criticalIssuesCount: analysisResult.criticalIssues?.length || 0
     });
     
-    // Удаляем временный файл
-    // try {
-    //   await fs.unlink(file.path);
-    //   console.log('🗑️ Временный файл удален');
-    // } catch (unlinkError) {
-    //   console.log('⚠️ Не удалось удалить временный файл:', unlinkError.message);
-    // }
+    let gdriveLink = null;
+    try {
+      const gdriveFile = await uploadToGoogleDrive(file.path, file.filename, file.mimetype);
+      gdriveLink = gdriveFile.webViewLink;
+      analysisResult.gdriveLink = gdriveLink;
+      // Удаляем локальный файл
+      await fs.unlink(file.path);
+      console.log('🗑️ Локальный файл удалён после загрузки в Google Drive');
+    } catch (gerr) {
+      console.error('❌ Ошибка загрузки в Google Drive:', gerr);
+      analysisResult.gdriveLink = null;
+    }
     
     // Возвращаем результат на фронтенд
     res.json(analysisResult);
@@ -349,8 +355,8 @@ app.post('/api/send-approval-request', async (req, res) => {
 
     console.log('📨 Получен запрос на отправку в Telegram:', { responsible, companyName, filename });
 
-    if (!config.telegram.botToken || !config.telegram.chatId) {
-      throw new Error('Telegram не настроен. Проверьте TELEGRAM_BOT_TOKEN и TELEGRAM_CHAT_ID в .env');
+    if (!config.telegram.botToken || !config.telegram.channelId) {
+      throw new Error('Telegram не настроен. Проверьте TELEGRAM_BOT_TOKEN и TELEGRAM_CHANNEL_ID в .env');
     }
 
     const application = {
@@ -440,7 +446,7 @@ ${escapeMarkdown(application.comment)}` : ''}`;
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        chat_id: config.telegram.chatId,
+        chat_id: config.telegram.channelId,
         text: message,
         parse_mode: 'Markdown',
         reply_markup: keyboard
