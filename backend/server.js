@@ -200,17 +200,17 @@ function analyzePDFStructure(buffer) {
 
 app.post('/api/analyze-nda', upload.single('file'), async (req, res) => {
   try {
-    const { inn, companyName } = req.body;
+    const { responsible, companyName } = req.body;
     const file = req.file;
 
     console.log('📨 Получен запрос на анализ:', { 
-      inn, 
+      responsible, 
       companyName, 
       filename: file?.filename,
       size: file?.size 
     });
 
-    if (!file || !inn || !companyName) {
+    if (!file || !responsible || !companyName) {
       return res.status(400).json({ error: 'Не все поля заполнены' });
     }
 
@@ -242,14 +242,14 @@ app.post('/api/analyze-nda', upload.single('file'), async (req, res) => {
     const n8nPayload = {
       extractedText: extractedText,
       filename: file.filename,
-      inn: inn,
+      responsible: responsible,
       companyName: companyName,
       mimeType: file.mimetype || 'application/pdf'
     };
 
     console.log('📦 N8N payload готов:', {
       filename: n8nPayload.filename,
-      inn: n8nPayload.inn,
+      responsible: n8nPayload.responsible,
       companyName: n8nPayload.companyName,
       textLength: n8nPayload.extractedText.length
     });
@@ -304,16 +304,16 @@ app.post('/api/analyze-nda', upload.single('file'), async (req, res) => {
 // API для отправки в Telegram на согласование
 app.post('/api/send-approval-request', async (req, res) => {
   try {
-    const { inn, companyName, analysis, filename, comment } = req.body;
+    const { responsible, companyName, analysis, filename, comment } = req.body;
 
-    console.log('📨 Получен запрос на отправку в Telegram:', { inn, companyName, filename });
+    console.log('📨 Получен запрос на отправку в Telegram:', { responsible, companyName, filename });
 
     if (!config.telegram.botToken || !config.telegram.chatId) {
       throw new Error('Telegram не настроен. Проверьте TELEGRAM_BOT_TOKEN и TELEGRAM_CHAT_ID в .env');
     }
 
     const application = {
-      inn,
+      responsible,
       companyName,
       analysis,
       filename,
@@ -356,13 +356,13 @@ async function sendTelegramApprovalRequest(application) {
   });
 
   const escapeMarkdown = (text) => {
-    return text.replace(/[_*[\]()~`>#+=|{}.!-]/g, '\\$&');
+    return text.replace(/[_*\[\]()~`>#+=|{}.!-]/g, '\\$&');
   };
 
   const message = `🔔 *Требуется согласование NDA*
 
 📋 *Компания:* ${escapeMarkdown(application.companyName)}
-🏢 *ИНН:* ${escapeMarkdown(application.inn)}
+👤 *Ответственный:* ${escapeMarkdown(application.responsible)}
 📅 *Дата:* ${escapeMarkdown(new Date().toLocaleString('ru-RU'))}
 📄 *Файл:* ${escapeMarkdown(application.filename)}
 
@@ -387,7 +387,7 @@ ${escapeMarkdown(application.comment)}` : ''}`;
       ],
       [
         { text: '⚖️ Отправить юристам', callback_data: `lawyers_${shortId}` },
-        { text: '�� Скачать NDA', url: `${process.env.BACKEND_URL || 'https://nda-system-dbrain.onrender.com'}/api/download/${encodeURIComponent(application.filename)}` }
+        { text: '📄 Скачать NDA', url: `${process.env.BACKEND_URL || 'https://nda-system-dbrain.onrender.com'}/api/download/${encodeURIComponent(application.filename)}` }
       ]
     ]
   };
@@ -460,7 +460,7 @@ app.post('/api/telegram-webhook', async (req, res) => {
     const application = applications.get(token) || {
       token: token,
       companyName: 'Неизвестно',
-      inn: 'Неизвестно',
+      responsible: 'Неизвестно',
       filename: 'Неизвестно',
       comment: ''
     };
@@ -468,12 +468,12 @@ app.post('/api/telegram-webhook', async (req, res) => {
     // Пытаемся извлечь данные из текста сообщения
     const messageText = messageData.text || '';
     const companyMatch = messageText.match(/Компания:\s*(.+)/);
-    const innMatch = messageText.match(/ИНН:\s*(.+)/);
+    const responsibleMatch = messageText.match(/Ответственный:\s*(.+)/);
     const fileMatch = messageText.match(/Файл:\s*(.+)/);
     const commentMatch = messageText.match(/Комментарий специалиста:\s*([^]*?)(?=\n\n|\n*$)/);
     
     if (companyMatch) application.companyName = companyMatch[1].trim();
-    if (innMatch) application.inn = innMatch[1].trim();
+    if (responsibleMatch) application.responsible = responsibleMatch[1].trim();
     if (fileMatch) application.filename = fileMatch[1].trim();
     if (commentMatch) application.comment = commentMatch[1].trim();
 
@@ -555,9 +555,9 @@ async function editMessageWithResult(chatId, messageId, application, decision) {
     let resultMessage = '';
   
   if (decision === 'sent_to_lawyers') {
-    resultMessage = `⚖️ *Отправлено юристам*\n\n📋 *Компания:* ${application.companyName}\n👤 *Ответственный:* ${application.responsible || application.inn}\n\n*Решение:* ⚖️ ТРЕБУЕТ СОГЛАСОВАНИЯ С ЮРИСТАМИ\n*Кем:* ${application.sentBy}\n*Время:* ${application.sentAt.toLocaleString('ru-RU')}`;
+    resultMessage = `⚖️ *Отправлено юристам*\n\n📋 *Компания:* ${application.companyName}\n👤 *Ответственный:* ${application.responsible}\n\n*Решение:* ⚖️ ТРЕБУЕТ СОГЛАСОВАНИЯ С ЮРИСТАМИ\n*Кем:* ${application.sentBy}\n*Время:* ${application.sentAt.toLocaleString('ru-RU')}`;
   } else {
-    resultMessage = `✅ *Решение принято*\n\n📋 *Компания:* ${application.companyName}\n👤 *Ответственный:* ${application.responsible || application.inn}\n\n*Решение:* ${decision === 'approved' ? '✅ СОГЛАСОВАНО' : '❌ ОТКЛОНЕНО'}\n*Кем:* ${application.approvedBy || application.rejectedBy}\n*Время:* ${(application.approvedAt || application.rejectedAt).toLocaleString('ru-RU')}`;
+    resultMessage = `✅ *Решение принято*\n\n📋 *Компания:* ${application.companyName}\n👤 *Ответственный:* ${application.responsible}\n\n*Решение:* ${decision === 'approved' ? '✅ СОГЛАСОВАНО' : '❌ ОТКЛОНЕНО'}\n*Кем:* ${application.approvedBy || application.rejectedBy}\n*Время:* ${(application.approvedAt || application.rejectedAt).toLocaleString('ru-RU')}`;
   }
 
   try {
@@ -589,11 +589,11 @@ async function sendDecisionToChannel(application, decision, decidedBy) {
     `\n\n💬 *Комментарий:*\n${escapeMarkdown(application.comment)}` : '';
   
   if (decision === 'approved') {
-    channelMessage = `✅ *NDA СОГЛАСОВАНО*\n\n📋 *Компания:* ${escapeMarkdown(application.companyName)}\n👤 *Ответственный:* ${escapeMarkdown(application.responsible || application.inn)}\n\n*Согласовал:* ${escapeMarkdown(decidedBy)}${commentSection}`;
+    channelMessage = `✅ *NDA СОГЛАСОВАНО*\n\n📋 *Компания:* ${escapeMarkdown(application.companyName)}\n👤 *Ответственный:* ${escapeMarkdown(application.responsible)}\n\n*Согласовал:* ${escapeMarkdown(decidedBy)}${commentSection}`;
   } else if (decision === 'rejected') {
-    channelMessage = `❌ *NDA ОТКЛОНЕНО*\n\n📋 *Компания:* ${escapeMarkdown(application.companyName)}\n👤 *Ответственный:* ${escapeMarkdown(application.responsible || application.inn)}\n\n*Отклонил:* ${escapeMarkdown(decidedBy)}${commentSection}`;
+    channelMessage = `❌ *NDA ОТКЛОНЕНО*\n\n📋 *Компания:* ${escapeMarkdown(application.companyName)}\n👤 *Ответственный:* ${escapeMarkdown(application.responsible)}\n\n*Отклонил:* ${escapeMarkdown(decidedBy)}${commentSection}`;
   } else if (decision === 'sent_to_lawyers') {
-    channelMessage = `⚖️ *NDA ОТПРАВЛЕНО ЮРИСТАМ*\n\n📋 *Компания:* ${escapeMarkdown(application.companyName)}\n👤 *Ответственный:* ${escapeMarkdown(application.responsible || application.inn)}\n\n*Отправил:* ${escapeMarkdown(decidedBy)}${commentSection}`;
+    channelMessage = `⚖️ *NDA ОТПРАВЛЕНО ЮРИСТАМ*\n\n📋 *Компания:* ${escapeMarkdown(application.companyName)}\n👤 *Ответственный:* ${escapeMarkdown(application.responsible)}\n\n*Отправил:* ${escapeMarkdown(decidedBy)}${commentSection}`;
   }
 
   try {
