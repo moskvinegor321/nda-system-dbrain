@@ -393,6 +393,18 @@ app.post('/api/send-approval-request', async (req, res) => {
       comment
     };
 
+    // Если auto-approve — сразу постим в канал
+    const status = (analysis && (analysis.status || analysis.json?.status || analysis.data?.status || '')).toLowerCase();
+    if (status === 'approve' || status === 'auto-approve' || status === 'auto_approve' || status === 'autoapproved') {
+      await sendDecisionToChannel(application, 'approved', 'AI');
+      return res.json({
+        success: true,
+        message: 'NDA автоматически согласовано и отправлено в канал',
+        autoApproved: true
+      });
+    }
+
+    // Обычное согласование — отправляем в бот
     const token = await sendTelegramApprovalRequest(application);
 
     res.json({ 
