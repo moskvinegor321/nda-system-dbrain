@@ -2,7 +2,7 @@ const { google } = require('googleapis');
 const path = require('path');
 const fs = require('fs');
 
-const KEYFILEPATH = path.join(__dirname, 'google-service-account.json');
+const KEYFILEPATH = process.env.GOOGLE_SERVICE_ACCOUNT_PATH || path.join(__dirname, 'google-service-account.json');
 const SCOPES = ['https://www.googleapis.com/auth/drive.file'];
 const FOLDER_ID = '1-6QkkEtYlHvaM7ILMZ5jgVlss6hIB2Fq';
 
