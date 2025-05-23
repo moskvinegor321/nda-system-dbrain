@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Upload, CheckCircle, AlertTriangle, FileText, Building, User } from 'lucide-react';
 
 // API Configuration
@@ -97,6 +97,29 @@ const NDAApprovalApp = () => {
     setError(null);
   };
 
+  // Drag & Drop: сброс dragActive при уходе мыши за пределы окна
+  useEffect(() => {
+    const handleWindowDragOver = (e) => {
+      e.preventDefault();
+    };
+    const handleWindowDrop = (e) => {
+      setDragActive(false);
+    };
+    const handleWindowDragLeave = (e) => {
+      if (e.relatedTarget === null) {
+        setDragActive(false);
+      }
+    };
+    window.addEventListener('dragover', handleWindowDragOver);
+    window.addEventListener('drop', handleWindowDrop);
+    window.addEventListener('dragleave', handleWindowDragLeave);
+    return () => {
+      window.removeEventListener('dragover', handleWindowDragOver);
+      window.removeEventListener('drop', handleWindowDrop);
+      window.removeEventListener('dragleave', handleWindowDragLeave);
+    };
+  }, []);
+
   // Экран 1: Загрузка документа
   if (currentStep === 1) {
     return (
@@ -154,6 +177,11 @@ const NDAApprovalApp = () => {
                         : 'PDF, DOCX, DOC, TXT, RTF до 10 MB'}
                     </p>
                   </label>
+                  {dragActive && (
+                    <div className="absolute inset-0 z-10 bg-blue-100 bg-opacity-60 border-4 border-blue-500 rounded-lg flex items-center justify-center pointer-events-none transition-all">
+                      <span className="text-blue-700 font-semibold text-lg">Отпустите файл для загрузки</span>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -299,6 +327,16 @@ const NDAApprovalApp = () => {
       );
     }
     // ... остальной код для ручного согласования ...
+    // Fallback для неизвестного статуса
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="bg-white p-8 rounded-lg shadow border border-gray-200 max-w-md w-full text-center">
+          <h2 className="text-2xl font-bold mb-4 text-gray-900">Неизвестный статус анализа</h2>
+          <p className="text-gray-600 mb-2">Статус: <span className="font-mono">{analysisResult?.status || 'нет данных'}</span></p>
+          <button onClick={resetForm} className="mt-4 bg-blue-600 text-white py-2 px-4 rounded hover:bg-blue-700 transition">Вернуться к загрузке</button>
+        </div>
+      </div>
+    );
   }
 
   return null;
