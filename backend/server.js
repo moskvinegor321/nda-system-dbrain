@@ -15,7 +15,10 @@ console.log('PORT:', process.env.PORT);
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-app.use(cors());
+app.use(cors({
+  origin: ['https://nda-analyzer-dbrain.netlify.app', 'http://localhost:3000'],
+  credentials: true
+}));
 app.use(express.json());
 
 // Настройка загрузки файлов
