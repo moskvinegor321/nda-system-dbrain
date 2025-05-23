@@ -602,34 +602,33 @@ async function editMessageWithResult(chatId, messageId, application, decision) {
 // Новая функция для отправки решения в канал
 async function sendDecisionToChannel(application, decision, decidedBy) {
   let channelMessage = '';
-  
   // Экранируем специальные символы Markdown
   const escapeMarkdown = (text) => {
     return text ? text.replace(/[_*\[\]()~`>#+=|{}.!-]/g, '\$&') : '';
   };
-  
   const commentSection = application.comment ? 
     `\n\n💬 *Комментарий:*\n${escapeMarkdown(application.comment)}` : '';
-  
+  // Формируем ссылку на скачивание
+  const downloadUrl = `${process.env.BACKEND_URL || 'https://nda-system-dbrain.onrender.com'}/api/download/${encodeURIComponent(application.filename)}`;
+  const downloadLine = `\n\n📄 [Скачать NDA](${downloadUrl})`;
   if (decision === 'approved') {
-    channelMessage = `✅ *NDA СОГЛАСОВАНО*\n\n📋 *Компания:* ${escapeMarkdown(application.companyName)}\n👤 *Ответственный:* ${escapeMarkdown(application.responsible)}\n\n*Согласовал:* ${escapeMarkdown(decidedBy)}${commentSection}`;
+    channelMessage = `✅ *NDA СОГЛАСОВАНО*\n\n📋 *Компания:* ${escapeMarkdown(application.companyName)}\n👤 *Ответственный:* ${escapeMarkdown(application.responsible)}\n\n*Согласовал:* ${escapeMarkdown(decidedBy)}${commentSection}${downloadLine}`;
   } else if (decision === 'rejected') {
-    channelMessage = `❌ *NDA ОТКЛОНЕНО*\n\n📋 *Компания:* ${escapeMarkdown(application.companyName)}\n👤 *Ответственный:* ${escapeMarkdown(application.responsible)}\n\n*Отклонил:* ${escapeMarkdown(decidedBy)}${commentSection}`;
+    channelMessage = `❌ *NDA ОТКЛОНЕНО*\n\n📋 *Компания:* ${escapeMarkdown(application.companyName)}\n👤 *Ответственный:* ${escapeMarkdown(application.responsible)}\n\n*Отклонил:* ${escapeMarkdown(decidedBy)}${commentSection}${downloadLine}`;
   } else if (decision === 'sent_to_lawyers') {
-    channelMessage = `⚖️ *NDA ОТПРАВЛЕНО ЮРИСТАМ*\n\n📋 *Компания:* ${escapeMarkdown(application.companyName)}\n👤 *Ответственный:* ${escapeMarkdown(application.responsible)}\n\n*Отправил:* ${escapeMarkdown(decidedBy)}${commentSection}`;
+    channelMessage = `⚖️ *NDA ОТПРАВЛЕНО ЮРИСТАМ*\n\n📋 *Компания:* ${escapeMarkdown(application.companyName)}\n👤 *Ответственный:* ${escapeMarkdown(application.responsible)}\n\n*Отправил:* ${escapeMarkdown(decidedBy)}${commentSection}${downloadLine}`;
   }
-
   try {
     console.log('📤 Отправляем сообщение в канал...');
     console.log('💬 Комментарий:', application.comment || 'нет');
-    
     const response = await fetch(`${config.telegram.apiUrl}/sendMessage`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         chat_id: config.telegram.channelId,
         text: channelMessage,
-        parse_mode: 'Markdown'
+        parse_mode: 'Markdown',
+        disable_web_page_preview: true
       })
     });
     const result = await response.json();
