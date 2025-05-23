@@ -357,6 +357,7 @@ ${application.analysis.criticalIssues.map(issue => `• ${escapeMarkdown(issue)}
 ${application.comment ? `*Комментарий специалиста:*
 ${escapeMarkdown(application.comment)}` : ''}`;
 
+console.log('📱 Telegram filename:', application.filename);
  const keyboard = {
     inline_keyboard: [
       [
@@ -364,7 +365,7 @@ ${escapeMarkdown(application.comment)}` : ''}`;
         { text: '❌ Отклонить', callback_data: `reject_${token}` }
       ],
       [
-      { text: '📄 Скачать NDA', url: `https://nda-system-dbrain.onrender.com/api/download/${application.filename}` }
+     { text: '📄 Скачать NDA', url: `https://nda-system-dbrain.onrender.com/api/download/${application.filename}` }
       ]
     ]
   };
