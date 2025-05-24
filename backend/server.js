@@ -663,24 +663,35 @@ async function editMessageWithResult(chatId, messageId, application, decision) {
   }
 }
 
-// Новая функция для отправки решения в канал
+// --- Вспомогательная функция для Markdown-ссылок ---
+function makeMarkdownLink(text, url) {
+  return `[${text}](${url})`;
+}
+
+// В sendDecisionToChannel:
 async function sendDecisionToChannel(application, decision, decidedBy) {
   let channelMessage = '';
-  // Экранируем специальные символы Markdown
+  // Экранируем специальные символы Markdown только в тексте
   const escapeMarkdown = (text) => {
     return text ? text.replace(/[_*\[\]()~`>#+=|{}.!-]/g, '\\$&') : '';
   };
-  const commentSection = application.comment ? 
-    `\n\n💬 *Комментарий:*\n${escapeMarkdown(application.comment)}` : '';
-  // Формируем ссылку на скачивание
+  // --- Комментарий ---
+  let commentSection = '';
+  if (application.comment) {
+    // Если в комментарии есть ссылка, не экранируем её, а делаем Markdown-ссылку
+    const urlRegex = /(https?:\/\/\S+)/g;
+    let comment = application.comment.replace(urlRegex, (url) => makeMarkdownLink(url, url));
+    commentSection = `\n\n💬 *Комментарий:*\n${escapeMarkdown(comment)}`;
+  }
+  // --- Ссылка на скачивание ---
   let downloadUrl = application.gdriveLink || (application.analysis && application.analysis.gdriveLink) || `${process.env.BACKEND_URL || 'https://nda-system-dbrain.onrender.com'}/api/download/${encodeURIComponent(application.filename)}`;
-  const downloadLine = `\n\n📄 [Скачать NDA](${downloadUrl})`;
-  // Формируем блок ключевых условий
+  const downloadLine = `\n\n📄 ${makeMarkdownLink('Скачать NDA', downloadUrl)}`;
+  // --- Ключевые условия ---
   let keyPointsBlock = '';
   if (application.analysis && Array.isArray(application.analysis.keyPoints) && application.analysis.keyPoints.length > 0) {
     keyPointsBlock = '\n\n*Ключевые условия:*\n' + application.analysis.keyPoints.map(point => `• ${escapeMarkdown(point)}`).join('\n');
   }
-  // Формируем блок заключения AI
+  // --- Заключение AI ---
   let summaryBlock = '';
   if (application.analysis && application.analysis.summary) {
     summaryBlock = `\n\n*Заключение AI:*\n${escapeMarkdown(application.analysis.summary)}`;
