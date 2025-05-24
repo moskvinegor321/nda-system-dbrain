@@ -481,12 +481,11 @@ app.post('/api/send-approval-request', async (req, res) => {
   }
 });
 
-// --- Исправленная функция экранирования только текста, не ссылок ---
+// --- Упрощенная функция экранирования для Telegram ---
 const escapeMarkdown = (text) => {
   if (!text) return '';
-  // Не экранируем ссылки вида http(s)://...
-  return text.replace(/(https?:\/\/[^\s]+)/g, (url) => url)
-    .replace(/[_*\[\]()~`>#+=|{}.!-]/g, '\\$&');
+  // Экранируем только самые необходимые символы для Telegram Markdown
+  return text.replace(/[_*\[\]`]/g, '\\$&');
 };
 
 // Функция отправки сообщения в Telegram с кнопками
@@ -764,7 +763,7 @@ async function sendDecisionToChannel(application, decision, decidedBy) {
   let channelMessage = '';
   // Экранируем специальные символы Markdown
   const escapeMarkdown = (text) => {
-    return text ? text.replace(/[_*\[\]()~`>#+=|{}.!-]/g, '\\$&') : '';
+    return text ? text.replace(/[_*\[\]`]/g, '\\$&') : '';
   };
   
   // Определяем тип документа
