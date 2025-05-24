@@ -421,6 +421,14 @@ app.post('/api/send-approval-request', async (req, res) => {
   }
 });
 
+// --- Исправленная функция экранирования только текста, не ссылок ---
+const escapeMarkdown = (text) => {
+  if (!text) return '';
+  // Не экранируем ссылки вида http(s)://...
+  return text.replace(/(https?:\/\/[^\s]+)/g, (url) => url)
+    .replace(/[_*\[\]()~`>#+=|{}.!-]/g, '\\$&');
+};
+
 // Функция отправки сообщения в Telegram с кнопками
 async function sendTelegramApprovalRequest(application) {
   const token = Math.random().toString(36).substring(2, 15);
@@ -439,10 +447,6 @@ async function sendTelegramApprovalRequest(application) {
     status: 'pending_approval',
     createdAt: new Date()
   });
-
-  const escapeMarkdown = (text) => {
-    return text.replace(/[_*\[\]()~`>#+=|{}.!-]/g, '\\$&');
-  };
 
   // --- Кнопка скачивания ---
   let downloadUrl = application.gdriveLink || (application.analysis && application.analysis.gdriveLink) || `${process.env.BACKEND_URL || 'https://nda-system-dbrain.onrender.com'}/api/download/${encodeURIComponent(application.filename)}`;
@@ -663,35 +667,24 @@ async function editMessageWithResult(chatId, messageId, application, decision) {
   }
 }
 
-// --- Вспомогательная функция для Markdown-ссылок ---
-function makeMarkdownLink(text, url) {
-  return `[${text}](${url})`;
-}
-
-// В sendDecisionToChannel:
+// Новая функция для отправки решения в канал
 async function sendDecisionToChannel(application, decision, decidedBy) {
   let channelMessage = '';
-  // Экранируем специальные символы Markdown только в тексте
+  // Экранируем специальные символы Markdown
   const escapeMarkdown = (text) => {
     return text ? text.replace(/[_*\[\]()~`>#+=|{}.!-]/g, '\\$&') : '';
   };
-  // --- Комментарий ---
-  let commentSection = '';
-  if (application.comment) {
-    // Если в комментарии есть ссылка, не экранируем её, а делаем Markdown-ссылку
-    const urlRegex = /(https?:\/\/\S+)/g;
-    let comment = application.comment.replace(urlRegex, (url) => makeMarkdownLink(url, url));
-    commentSection = `\n\n💬 *Комментарий:*\n${escapeMarkdown(comment)}`;
-  }
-  // --- Ссылка на скачивание ---
+  const commentSection = application.comment ? 
+    `\n\n💬 *Комментарий:*\n${escapeMarkdown(application.comment)}` : '';
+  // Формируем ссылку на скачивание
   let downloadUrl = application.gdriveLink || (application.analysis && application.analysis.gdriveLink) || `${process.env.BACKEND_URL || 'https://nda-system-dbrain.onrender.com'}/api/download/${encodeURIComponent(application.filename)}`;
-  const downloadLine = `\n\n📄 ${makeMarkdownLink('Скачать NDA', downloadUrl)}`;
-  // --- Ключевые условия ---
+  const downloadLine = `\n\n📄 [Скачать NDA](${downloadUrl})`;
+  // Формируем блок ключевых условий
   let keyPointsBlock = '';
   if (application.analysis && Array.isArray(application.analysis.keyPoints) && application.analysis.keyPoints.length > 0) {
     keyPointsBlock = '\n\n*Ключевые условия:*\n' + application.analysis.keyPoints.map(point => `• ${escapeMarkdown(point)}`).join('\n');
   }
-  // --- Заключение AI ---
+  // Формируем блок заключения AI
   let summaryBlock = '';
   if (application.analysis && application.analysis.summary) {
     summaryBlock = `\n\n*Заключение AI:*\n${escapeMarkdown(application.analysis.summary)}`;
