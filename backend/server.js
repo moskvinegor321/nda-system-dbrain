@@ -447,18 +447,22 @@ app.post('/api/send-approval-request', async (req, res) => {
       comment
     };
 
-    // Если auto-approve — сразу постим в канал
+    // Автосогласование ТОЛЬКО для NDA документов
     const status = (analysis && (analysis.status || analysis.json?.status || analysis.data?.status || '')).toLowerCase();
-    // --- Новая логика: если analysis.notNDA === true, всегда только ручное согласование ---
-    if (!analysis?.notNDA && (status === 'approve' || status === 'auto-approve' || status === 'auto_approve' || status === 'autoapproved')) {
+    const docType = getDocumentType(analysis);
+    
+    // Проверяем: документ должен быть NDA И иметь статус автосогласования
+    if (docType === 'nda' && (status === 'approve' || status === 'auto-approve' || status === 'auto_approve' || status === 'autoapproved')) {
+      console.log('✅ NDA автоматически согласовано');
       await sendDecisionToChannel(application, 'approved', 'AI');
       return res.json({
         success: true,
-        message: 'Документ автоматически согласован и отправлен в канал',
+        message: 'NDA автоматически согласовано и отправлено в канал',
         autoApproved: true
       });
     }
-    // --- Конец новой логики ---
+    
+    console.log('📋 Документ отправлен на ручное согласование:', { docType, status });
 
     // Обычное согласование — отправляем в бот
     const token = await sendTelegramApprovalRequest(application);
@@ -510,19 +514,36 @@ async function sendTelegramApprovalRequest(application) {
   // Формируем блок ключевых условий
   let keyPointsBlock = '';
   if (application.analysis && Array.isArray(application.analysis.keyPoints) && application.analysis.keyPoints.length > 0) {
-    keyPointsBlock = '\n\n*Ключевые условия:*\n' + application.analysis.keyPoints.map(point => `• ${escapeMarkdown(point)}`).join('\n');
+    keyPointsBlock = '\n\n📝 *Ключевые условия:*\n' + application.analysis.keyPoints.map(point => `• ${escapeMarkdown(point)}`).join('\n');
   }
   // Формируем блок заключения AI
   let summaryBlock = '';
   if (application.analysis && application.analysis.summary) {
-    summaryBlock = `\n\n*Заключение AI:*\n${escapeMarkdown(application.analysis.summary)}`;
+    summaryBlock = `\n\n🤖 *Заключение AI:*\n${escapeMarkdown(application.analysis.summary)}`;
   }
 
   // Определяем тип документа
   const docType = getDocumentType(application.analysis);
   const docDisplayName = getDocumentDisplayName(docType);
   
-  const message = `🔔 *Требуется согласование ${docDisplayName}*\n\n📋 *Компания:* ${escapeMarkdown(application.companyName)}\n👤 *Ответственный:* ${escapeMarkdown(application.responsible)}\n📅 *Дата:* ${escapeMarkdown(new Date().toLocaleString('ru-RU'))}\n📄 *Файл:* ${escapeMarkdown(application.filename)}${keyPointsBlock}${summaryBlock}\n\n${application.analysis.criticalIssues && application.analysis.criticalIssues.length > 0 ? `*Критические замечания:*\n${application.analysis.criticalIssues.map(issue => `• ${escapeMarkdown(issue)}`).join('\n')}` : ''}\n\n${application.comment ? `*Комментарий специалиста:*\n${escapeMarkdown(application.comment)}` : ''}`;
+  // Формируем блок критических замечаний
+  let criticalIssuesBlock = '';
+  if (application.analysis.criticalIssues && application.analysis.criticalIssues.length > 0) {
+    criticalIssuesBlock = `\n\n⚠️ *Критические замечания:*\n${application.analysis.criticalIssues.map(issue => `• ${escapeMarkdown(issue)}`).join('\n')}`;
+  }
+  
+  // Формируем блок комментария
+  let commentBlock = '';
+  if (application.comment) {
+    commentBlock = `\n\n💬 *Комментарий специалиста:*\n${escapeMarkdown(application.comment)}`;
+  }
+  
+  const message = `🔔 *Требуется согласование ${docDisplayName}*
+
+📋 *Компания:* ${escapeMarkdown(application.companyName)}
+👤 *Ответственный:* ${escapeMarkdown(application.responsible)}
+📅 *Дата:* ${escapeMarkdown(new Date().toLocaleString('ru-RU'))}
+📄 *Файл:* ${escapeMarkdown(application.filename)}${keyPointsBlock}${summaryBlock}${criticalIssuesBlock}${commentBlock}`;
 
   console.log('📱 Telegram filename:', application.filename);
   console.log('🔑 Short ID length:', Buffer.byteLength(`approve_${shortId}`, 'utf8'), 'bytes');
@@ -759,12 +780,12 @@ async function sendDecisionToChannel(application, decision, decidedBy) {
   // Формируем блок ключевых условий
   let keyPointsBlock = '';
   if (application.analysis && Array.isArray(application.analysis.keyPoints) && application.analysis.keyPoints.length > 0) {
-    keyPointsBlock = '\n\n*Ключевые условия:*\n' + application.analysis.keyPoints.map(point => `• ${escapeMarkdown(point)}`).join('\n');
+    keyPointsBlock = '\n\n📝 *Ключевые условия:*\n' + application.analysis.keyPoints.map(point => `• ${escapeMarkdown(point)}`).join('\n');
   }
   // Формируем блок заключения AI
   let summaryBlock = '';
   if (application.analysis && application.analysis.summary) {
-    summaryBlock = `\n\n*Заключение AI:*\n${escapeMarkdown(application.analysis.summary)}`;
+    summaryBlock = `\n\n🤖 *Заключение AI:*\n${escapeMarkdown(application.analysis.summary)}`;
   }
   
   // Определяем как согласован документ
@@ -772,11 +793,26 @@ async function sendDecisionToChannel(application, decision, decidedBy) {
   const statusHeader = isAutoApproved ? 'СОГЛАСОВАН АВТОМАТИЧЕСКИ' : 'СОГЛАСОВАН';
   
   if (decision === 'approved') {
-    channelMessage = `✅ *${docUpperCase} ${statusHeader}*\n\n📋 *Компания:* ${escapeMarkdown(application.companyName)}\n👤 *Ответственный:* ${escapeMarkdown(application.responsible)}${keyPointsBlock}${summaryBlock}\n\n*Согласовал:* ${escapeMarkdown(decidedBy)}${commentSection}${downloadLine}`;
+    channelMessage = `✅ *${docUpperCase} ${statusHeader}*
+
+📋 *Компания:* ${escapeMarkdown(application.companyName)}
+👤 *Ответственный:* ${escapeMarkdown(application.responsible)}${keyPointsBlock}${summaryBlock}
+
+👨‍💼 *Согласовал:* ${escapeMarkdown(decidedBy)}${commentSection}${downloadLine}`;
   } else if (decision === 'rejected') {
-    channelMessage = `❌ *${docUpperCase} ОТКЛОНЕН${docType === 'договор' ? '' : 'О'}*\n\n📋 *Компания:* ${escapeMarkdown(application.companyName)}\n👤 *Ответственный:* ${escapeMarkdown(application.responsible)}${keyPointsBlock}${summaryBlock}\n\n*Отклонил:* ${escapeMarkdown(decidedBy)}${commentSection}${downloadLine}`;
+    channelMessage = `❌ *${docUpperCase} ОТКЛОНЕН${docType === 'договор' ? '' : 'О'}*
+
+📋 *Компания:* ${escapeMarkdown(application.companyName)}
+👤 *Ответственный:* ${escapeMarkdown(application.responsible)}${keyPointsBlock}${summaryBlock}
+
+🚫 *Отклонил:* ${escapeMarkdown(decidedBy)}${commentSection}${downloadLine}`;
   } else if (decision === 'sent_to_lawyers') {
-    channelMessage = `⚖️ *${docUpperCase} ТРЕБУЕТ КОНСУЛЬТАЦИИ ЮРИСТОВ*\n\n📋 *Компания:* ${escapeMarkdown(application.companyName)}\n👤 *Ответственный:* ${escapeMarkdown(application.responsible)}${keyPointsBlock}${summaryBlock}\n\n*Рекомендовал:* ${escapeMarkdown(decidedBy)}${commentSection}${downloadLine}`;
+    channelMessage = `⚖️ *${docUpperCase} ТРЕБУЕТ КОНСУЛЬТАЦИИ ЮРИСТОВ*
+
+📋 *Компания:* ${escapeMarkdown(application.companyName)}
+👤 *Ответственный:* ${escapeMarkdown(application.responsible)}${keyPointsBlock}${summaryBlock}
+
+👨‍⚖️ *Рекомендовал:* ${escapeMarkdown(decidedBy)}${commentSection}${downloadLine}`;
   }
   try {
     console.log('📤 Отправляем сообщение в канал...');

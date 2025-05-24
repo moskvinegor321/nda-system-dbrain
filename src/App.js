@@ -303,6 +303,11 @@ const NDAApprovalApp = () => {
 
   // Экран 2: Результат анализа
   if (currentStep === 2 && analysisResult) {
+    // Проверяем на ошибку обработки
+    const isProcessingError = analysisResult.status === 'manual_review' && 
+      (analysisResult.summary?.includes('Ошибка обработки') || 
+       analysisResult.confidence === 0);
+    
     // Универсальный способ получить статус (с учетом вложенности)
     const status = analysisResult.status || analysisResult.json?.status || analysisResult.data?.status || '';
     const isApproved = [
@@ -315,7 +320,7 @@ const NDAApprovalApp = () => {
     // Определяем тип документа
     const docType = getDocumentType(analysisResult);
     const docDisplayName = getDocumentDisplayName(docType);
-
+    
     // --- Функция отправки на согласование в Telegram ---
     const handleSendToTelegram = async () => {
       try {
@@ -375,8 +380,96 @@ const NDAApprovalApp = () => {
         setLoading(false);
       }
     };
+    
+    // Специальный экран для ошибок обработки
+    if (isProcessingError) {
+      return (
+        <div className="min-h-screen bg-gray-50 py-12 px-4">
+          <div className="max-w-3xl mx-auto">
+            <div className="text-center mb-8">
+              <div className="inline-flex items-center justify-center w-16 h-16 bg-red-100 rounded-full mb-4">
+                <AlertTriangle className="w-8 h-8 text-red-600" />
+              </div>
+              <h2 className="text-3xl font-bold text-gray-900 mb-2">
+                Ошибка анализа документа
+              </h2>
+              <p className="text-gray-600">Не удалось обработать документ автоматически</p>
+            </div>
 
-    if (isApproved && !isNotNDA) {
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+              <div className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-lg">
+                <div className="flex items-start">
+                  <AlertTriangle className="w-5 h-5 text-amber-600 mr-2 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <h3 className="text-amber-800 font-medium text-sm">Что произошло:</h3>
+                    <p className="text-amber-700 text-sm mt-1">
+                      Система анализа вернула некорректный результат. Это может быть связано с:
+                    </p>
+                    <ul className="text-amber-700 text-sm mt-2 space-y-1">
+                      <li>• Сложной структурой документа</li>
+                      <li>• Нестандартным форматом файла</li>
+                      <li>• Временными проблемами с сервисом анализа</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="flex items-center text-sm font-semibold text-gray-900 mb-3">
+                    <AlertTriangle className="w-4 h-4 mr-2 text-gray-500" />
+                    Комментарий для согласующего
+                  </label>
+                  <textarea
+                    value={formData.comment}
+                    onChange={(e) => setFormData(prev => ({ ...prev, comment: e.target.value }))}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all text-sm resize-none"
+                    placeholder="Опишите документ и укажите особенности для ручного согласования..."
+                    rows="3"
+                  />
+                  <p className="text-xs text-gray-500 mt-2">
+                    Рекомендуем описать тип документа и основные условия
+                  </p>
+                </div>
+
+                <div className="space-y-3">
+                  <button
+                    onClick={handleSendToTelegram}
+                    disabled={loading}
+                    className="w-full bg-blue-600 text-white py-3 px-4 rounded-lg hover:bg-blue-700 transition-all font-medium flex items-center justify-center disabled:opacity-50"
+                  >
+                    {loading ? (
+                      <>
+                        <div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent mr-2"></div>
+                        Отправляем...
+                      </>
+                    ) : (
+                      <>
+                        <FileText className="w-5 h-5 mr-2" />
+                        Отправить на ручное согласование
+                      </>
+                    )}
+                  </button>
+                  <button
+                    onClick={resetForm}
+                    className="w-full bg-white text-gray-700 py-3 px-4 rounded-lg border border-gray-300 hover:bg-gray-50 transition-all font-medium"
+                  >
+                    Попробовать снова с другим файлом
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-6 text-center text-xs text-gray-500">
+              <p>Компания: {formData.companyName} • Ответственный: {formData.responsible}</p>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // Автосогласование показываем ТОЛЬКО для NDA
+    if (isApproved && docType === 'nda') {
       // --- Красивая форма для автоапрува ---
       return (
         <div className="min-h-screen bg-gray-50 py-12 px-4">
