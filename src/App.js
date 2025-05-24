@@ -263,6 +263,7 @@ const NDAApprovalApp = () => {
       'auto_approve', 'autoapproved', 'success', 'ok'
     ].includes((status || '').toLowerCase());
     const isStatusKnown = !!status;
+    const isNotNDA = !!analysisResult.notNDA;
 
     // --- Функция отправки на согласование в Telegram ---
     const handleSendToTelegram = async () => {
@@ -324,7 +325,7 @@ const NDAApprovalApp = () => {
       }
     };
 
-    if (isApproved) {
+    if (isApproved && !isNotNDA) {
       // --- Красивая форма для автоапрува ---
       return (
         <div className="min-h-screen bg-gray-50 py-12 px-4">
@@ -418,7 +419,7 @@ const NDAApprovalApp = () => {
         </div>
       );
     }
-    // --- Форма ручного согласования для всех остальных статусов ---
+    // --- Форма ручного согласования для всех остальных статусов или если не NDA ---
     if (isStatusKnown) {
       return (
         <div className="min-h-screen bg-gray-50 py-12 px-4">
@@ -431,6 +432,14 @@ const NDAApprovalApp = () => {
               <h2 className="text-3xl font-bold text-gray-900 mb-2">
                 Требуется ручное согласование
               </h2>
+              {isNotNDA && (
+                <div className="mb-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg flex items-center justify-center">
+                  <AlertTriangle className="w-5 h-5 text-yellow-600 mr-2 flex-shrink-0" />
+                  <span className="text-yellow-800 text-sm font-medium">
+                    Документ не похож на NDA. Автоматическое согласование невозможно, требуется ручное согласование.
+                  </span>
+                </div>
+              )}
               <p className="text-gray-600">{analysisResult.summary}</p>
               {analysisResult.confidence && (
                 <div className="mt-2">
