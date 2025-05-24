@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Upload, CheckCircle, AlertTriangle, FileText, Building, User } from 'lucide-react';
+import { Upload, CheckCircle, AlertTriangle, FileText, Building, User, HelpCircle, Info, Clock, Shield } from 'lucide-react';
 
 // API Configuration
 const API_BASE_URL = 'https://nda-system-dbrain.onrender.com';
@@ -17,6 +17,122 @@ const NDAApprovalApp = () => {
   const [error, setError] = useState(null);
   const dropRef = useRef();
   const [dragActive, setDragActive] = useState(false);
+  const [showInstructions, setShowInstructions] = useState(false);
+
+  // Компонент инструкций
+  const InstructionsModal = () => {
+    if (!showInstructions) return null;
+    
+    return (
+      <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+        <div className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+          <div className="p-6">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-2xl font-bold text-gray-900 flex items-center">
+                <HelpCircle className="w-6 h-6 text-blue-600 mr-2" />
+                Инструкция по использованию
+              </h2>
+              <button
+                onClick={() => setShowInstructions(false)}
+                className="text-gray-400 hover:text-gray-600 text-2xl font-bold"
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="space-y-6">
+              {/* Шаг 1 */}
+              <div className="border border-blue-200 rounded-lg p-4 bg-blue-50">
+                <h3 className="font-semibold text-blue-900 mb-3 flex items-center">
+                  <span className="inline-flex items-center justify-center w-6 h-6 bg-blue-600 text-white rounded-full text-sm font-bold mr-2">1</span>
+                  Загрузка документа
+                </h3>
+                <ul className="text-sm text-blue-800 space-y-2">
+                  <li>• Перетащите файл в область загрузки или нажмите для выбора</li>
+                  <li>• Поддерживаются: PDF, DOCX, DOC, TXT, RTF (до 10 MB)</li>
+                  <li>• Заполните поля "Ответственный" и "Название компании"</li>
+                  <li>• Нажмите "Начать анализ"</li>
+                </ul>
+              </div>
+
+              {/* Шаг 2 */}
+              <div className="border border-green-200 rounded-lg p-4 bg-green-50">
+                <h3 className="font-semibold text-green-900 mb-3 flex items-center">
+                  <span className="inline-flex items-center justify-center w-6 h-6 bg-green-600 text-white rounded-full text-sm font-bold mr-2">2</span>
+                  Автоматический анализ
+                </h3>
+                <ul className="text-sm text-green-800 space-y-2">
+                  <li>• ИИ анализирует документ в течение 15-30 секунд</li>
+                  <li>• Определяется тип документа (NDA, договор, другой)</li>
+                  <li>• Выявляются ключевые условия и критические моменты</li>
+                  <li>• Рассчитывается уровень риска и рекомендации</li>
+                </ul>
+              </div>
+
+              {/* Шаг 3 */}
+              <div className="border border-yellow-200 rounded-lg p-4 bg-yellow-50">
+                <h3 className="font-semibold text-yellow-900 mb-3 flex items-center">
+                  <span className="inline-flex items-center justify-center w-6 h-6 bg-yellow-600 text-white rounded-full text-sm font-bold mr-2">3</span>
+                  Принятие решения
+                </h3>
+                <div className="text-sm text-yellow-800 space-y-3">
+                  <div>
+                    <p className="font-medium">🟢 Автосогласование (только для NDA):</p>
+                    <p>Стандартные NDA без критических условий согласовываются автоматически</p>
+                  </div>
+                  <div>
+                    <p className="font-medium">🟡 Ручное согласование:</p>
+                    <p>Документы с особыми условиями отправляются экспертам в Telegram</p>
+                  </div>
+                  <div>
+                    <p className="font-medium">🔴 Критические проблемы:</p>
+                    <p>Документы с серьёзными проблемами требуют обязательного комментария</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Шаг 4 */}
+              <div className="border border-purple-200 rounded-lg p-4 bg-purple-50">
+                <h3 className="font-semibold text-purple-900 mb-3 flex items-center">
+                  <span className="inline-flex items-center justify-center w-6 h-6 bg-purple-600 text-white rounded-full text-sm font-bold mr-2">4</span>
+                  Результат и уведомления
+                </h3>
+                <ul className="text-sm text-purple-800 space-y-2">
+                  <li>• Все решения публикуются в корпоративном Telegram канале</li>
+                  <li>• Эксперты получают уведомления для ручного согласования</li>
+                  <li>• Документы хранятся 24 часа для скачивания</li>
+                  <li>• История всех решений ведётся в системе</li>
+                </ul>
+              </div>
+
+              {/* Безопасность */}
+              <div className="border border-gray-200 rounded-lg p-4 bg-gray-50">
+                <h3 className="font-semibold text-gray-900 mb-3 flex items-center">
+                  <Shield className="w-5 h-5 text-gray-600 mr-2" />
+                  Безопасность и конфиденциальность
+                </h3>
+                <ul className="text-sm text-gray-700 space-y-2">
+                  <li>• Все файлы автоматически удаляются через 24 часа</li>
+                  <li>• Анализ выполняется в защищенной среде</li>
+                  <li>• Передача данных осуществляется по HTTPS</li>
+                  <li>• Система соответствует требованиям конфиденциальности</li>
+                </ul>
+              </div>
+            </div>
+
+            <div className="mt-6 pt-4 border-t border-gray-200">
+              <button
+                onClick={() => setShowInstructions(false)}
+                className="w-full bg-blue-600 text-white py-3 px-4 rounded-lg hover:bg-blue-700 transition-all font-medium"
+              >
+                Понятно, начать работу
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
 
   // Функция определения типа документа
   const getDocumentType = (analysisResult) => {
@@ -170,8 +286,10 @@ const NDAApprovalApp = () => {
   // Экран 1: Загрузка документа
   if (currentStep === 1) {
     return (
-      <div className="min-h-screen bg-gray-50 py-12 px-4">
-        <div className="max-w-3xl mx-auto">
+      <>
+        <InstructionsModal />
+        <div className="min-h-screen bg-gray-50 py-12 px-4">
+          <div className="max-w-3xl mx-auto">
           {/* Header */}
           <div className="text-center mb-8">
             <div className="inline-flex items-center justify-center w-16 h-16 bg-blue-100 rounded-full mb-4">
@@ -179,6 +297,15 @@ const NDAApprovalApp = () => {
             </div>
             <h1 className="text-3xl font-bold text-gray-900">Document Analysis System</h1>
             <p className="mt-2 text-gray-600">Автоматический анализ и согласование документов</p>
+            
+            {/* Instructions Button */}
+            <button
+              onClick={() => setShowInstructions(true)}
+              className="mt-4 inline-flex items-center px-4 py-2 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 transition-all text-sm font-medium"
+            >
+              <HelpCircle className="w-4 h-4 mr-2" />
+              Как пользоваться системой?
+            </button>
           </div>
 
           {/* Main Card */}
@@ -315,6 +442,7 @@ const NDAApprovalApp = () => {
           </div>
         </div>
       </div>
+      </>
     );
   }
 
