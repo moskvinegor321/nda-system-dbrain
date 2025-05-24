@@ -395,7 +395,8 @@ app.post('/api/send-approval-request', async (req, res) => {
 
     // Если auto-approve — сразу постим в канал
     const status = (analysis && (analysis.status || analysis.json?.status || analysis.data?.status || '')).toLowerCase();
-    if (status === 'approve' || status === 'auto-approve' || status === 'auto_approve' || status === 'autoapproved') {
+    // --- Новая логика: если analysis.notNDA === true, всегда только ручное согласование ---
+    if (!analysis?.notNDA && (status === 'approve' || status === 'auto-approve' || status === 'auto_approve' || status === 'autoapproved')) {
       await sendDecisionToChannel(application, 'approved', 'AI');
       return res.json({
         success: true,
@@ -403,6 +404,7 @@ app.post('/api/send-approval-request', async (req, res) => {
         autoApproved: true
       });
     }
+    // --- Конец новой логики ---
 
     // Обычное согласование — отправляем в бот
     const token = await sendTelegramApprovalRequest(application);
@@ -648,7 +650,14 @@ async function editMessageWithResult(chatId, messageId, application, decision) {
   if (decision === 'sent_to_lawyers') {
     resultMessage = `⚖️ *Отправлено юристам*\n\n📋 *Компания:* ${application.companyName}\n👤 *Ответственный:* ${application.responsible}\n\n*Решение:* ⚖️ ТРЕБУЕТ СОГЛАСОВАНИЯ С ЮРИСТАМИ\n*Кем:* ${application.sentBy}\n*Время:* ${application.sentAt.toLocaleString('ru-RU')}`;
   } else {
-    resultMessage = `✅ *Решение принято*\n\n📋 *Компания:* ${application.companyName}\n👤 *Ответственный:* ${application.responsible}\n\n*Решение:* ${decision === 'approved' ? '✅ СОГЛАСОВАНО' : '❌ ОТКЛОНЕНО'}\n*Кем:* ${application.approvedBy || application.rejectedBy}\n*Время:* ${(application.approvedAt || application.rejectedAt).toLocaleString('ru-RU')}`;
+    resultMessage = `✅ *Решение принято*
+
+📋 *Компания:* ${application.companyName}
+👤 *Ответственный:* ${application.responsible}
+
+*Решение:* ${decision === 'approved' ? '✅ СОГЛАСОВАНО' : '❌ ОТКЛОНЕНО'}
+*Кем:* ${application.approvedBy || application.rejectedBy}
+*Время:* ${(application.approvedAt || application.rejectedAt).toLocaleString('ru-RU')}`;
   }
 
   try {
