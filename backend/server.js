@@ -7,7 +7,7 @@ const path = require('path');
 const pdfParse = require('pdf-parse');
 const crypto = require('crypto');
 const mammoth = require('mammoth');
-const { uploadToGoogleDrive } = require('./google-drive');
+const { cleanupOldFiles } = require('./cleanup');
 
 console.log('🚀 Запуск сервера NDA анализа...');
 console.log('N8N_WEBHOOK_URL:', process.env.N8N_WEBHOOK_URL);
@@ -227,30 +227,6 @@ function analyzePDFStructure(buffer) {
   }
 }
 
-const GDRIVE_LINKS_FILE = path.join(__dirname, 'gdrive-links.json');
-let gdriveLinksMap = new Map();
-
-// Загрузка gdrive-links.json при старте
-async function loadGdriveLinks() {
-  try {
-    const data = await fs.readFile(GDRIVE_LINKS_FILE, 'utf8');
-    const arr = JSON.parse(data);
-    gdriveLinksMap = new Map(arr.map(item => [item.filename, item.gdriveLink]));
-    console.log('✅ Загружено связок filename → gdriveLink:', gdriveLinksMap.size);
-  } catch (e) {
-    console.log('ℹ️ Нет файла gdrive-links.json, создаём новый при первом сохранении');
-    gdriveLinksMap = new Map();
-  }
-}
-loadGdriveLinks();
-
-// Сохранять связку filename → gdriveLink
-async function saveGdriveLink(filename, gdriveLink) {
-  gdriveLinksMap.set(filename, gdriveLink);
-  const arr = Array.from(gdriveLinksMap.entries()).map(([filename, gdriveLink]) => ({ filename, gdriveLink }));
-  await fs.writeFile(GDRIVE_LINKS_FILE, JSON.stringify(arr, null, 2), 'utf8');
-}
-
 // ЗАМЕНИТЕ ПОЛНОСТЬЮ функцию app.post('/api/analyze-nda') в вашем server.js
 
 app.post('/api/analyze-nda', upload.single('file'), async (req, res) => {
@@ -347,20 +323,19 @@ app.post('/api/analyze-nda', upload.single('file'), async (req, res) => {
       criticalIssuesCount: analysisResult.criticalIssues?.length || 0
     });
     
-    let gdriveLink = null;
-    try {
-      const gdriveFile = await uploadToGoogleDrive(file.path, file.filename, file.mimetype);
-      gdriveLink = gdriveFile.webViewLink;
-      analysisResult.gdriveLink = gdriveLink;
-      // Сохраняем связку filename → gdriveLink
-      await saveGdriveLink(file.filename, gdriveLink);
-      // Удаляем локальный файл
-      await fs.unlink(file.path);
-      console.log('🗑️ Локальный файл удалён после загрузки в Google Drive');
-    } catch (gerr) {
-      console.error('❌ Ошибка загрузки в Google Drive:', gerr);
-      analysisResult.gdriveLink = null;
-    }
+    // Генерируем URL для скачивания файла
+    const downloadUrl = `${req.protocol}://${req.get('host')}/api/download/${file.filename}`;
+    analysisResult.downloadUrl = downloadUrl;
+    
+    // Планируем удаление файла через 24 часа
+    setTimeout(async () => {
+      try {
+        await fs.unlink(file.path);
+        console.log(`🗑️ Автоочистка: файл ${file.filename} удален через 24 часа`);
+      } catch (error) {
+        console.error(`❌ Ошибка удаления файла ${file.filename}:`, error.message);
+      }
+    }, 24 * 60 * 60 * 1000); // 24 часа
     
     // Возвращаем результат на фронтенд
     res.json(analysisResult);
@@ -451,7 +426,7 @@ async function sendTelegramApprovalRequest(application) {
   });
 
   // --- Кнопка скачивания ---
-  let downloadUrl = application.gdriveLink || (application.analysis && application.analysis.gdriveLink) || `${process.env.BACKEND_URL || 'https://nda-system-dbrain.onrender.com'}/api/download/${encodeURIComponent(application.filename)}`;
+  let downloadUrl = application.analysis?.downloadUrl || `${process.env.BACKEND_URL || 'https://nda-system-dbrain.onrender.com'}/api/download/${encodeURIComponent(application.filename)}`;
 
   // Формируем блок ключевых условий
   let keyPointsBlock = '';
@@ -686,7 +661,7 @@ async function sendDecisionToChannel(application, decision, decidedBy) {
   const commentSection = application.comment ? 
     `\n\n💬 *Комментарий:*\n${escapeMarkdown(application.comment)}` : '';
   // Формируем ссылку на скачивание
-  let downloadUrl = application.gdriveLink || (application.analysis && application.analysis.gdriveLink) || `${process.env.BACKEND_URL || 'https://nda-system-dbrain.onrender.com'}/api/download/${encodeURIComponent(application.filename)}`;
+  let downloadUrl = application.analysis?.downloadUrl || `${process.env.BACKEND_URL || 'https://nda-system-dbrain.onrender.com'}/api/download/${encodeURIComponent(application.filename)}`;
   const downloadLine = `\n\n📄 [Скачать NDA](${downloadUrl})`;
   // Формируем блок ключевых условий
   let keyPointsBlock = '';
@@ -729,39 +704,26 @@ async function sendDecisionToChannel(application, decision, decidedBy) {
 app.get('/api/download/:filename', async (req, res) => {
   try {
     const { filename } = req.params;
-    const filePath = path.join('uploads', filename);
-    console.log('Пытаемся скачать файл:', filePath);
+    const filePath = path.join(__dirname, 'uploads', filename);
+    console.log('📥 Запрос на скачивание файла:', filePath);
+    
     try {
       await fs.access(filePath);
-      console.log('Файл найден, отправляем на скачивание');
-      return res.download(filePath);
+      console.log('✅ Файл найден, отправляем на скачивание');
+      // Устанавливаем правильные заголовки для скачивания
+      const originalName = filename.split('-').slice(1).join('-'); // убираем timestamp
+      res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(originalName)}"`);
+      return res.sendFile(path.resolve(filePath));
     } catch (accessError) {
-      console.error('Файл не найден локально:', filePath);
-      // Пытаемся найти ссылку на Google Drive
-      let gdriveLink = null;
-      for (const app of applications.values()) {
-        if (app.filename === filename && app.gdriveLink) {
-          gdriveLink = app.gdriveLink;
-          break;
-        }
-        if (app.analysis && app.analysis.gdriveLink && app.analysis.filename === filename) {
-          gdriveLink = app.analysis.gdriveLink;
-          break;
-        }
-      }
-      // Если не нашли в памяти — ищем в файле
-      if (!gdriveLink && gdriveLinksMap.has(filename)) {
-        gdriveLink = gdriveLinksMap.get(filename);
-      }
-      if (gdriveLink) {
-        console.log('Редиректим на Google Drive:', gdriveLink);
-        return res.redirect(gdriveLink);
-      }
-      res.status(404).json({ error: 'Файл не найден ни локально, ни в Google Drive' });
+      console.error('❌ Файл не найден локально:', filePath);
+      res.status(404).json({ 
+        error: 'Файл не найден или был удален (файлы хранятся 24 часа)',
+        filename: filename
+      });
     }
   } catch (error) {
-    console.error('Ошибка скачивания:', error);
-    res.status(404).json({ error: 'Файл не найден' });
+    console.error('❌ Ошибка скачивания:', error);
+    res.status(500).json({ error: 'Ошибка сервера при скачивании файла' });
   }
 });
 
@@ -803,6 +765,13 @@ app.listen(PORT, () => {
   console.log(`🧪 Тест Telegram: http://localhost:${PORT}/api/test-telegram`);
   console.log(`📄 Поддержка PDF с ЭЦП: включена`);
   console.log(`📢 Канал для автосогласований: ${config.telegram.channelId || 'НЕ НАСТРОЕН'}`);
+  
+  // Запускаем первую очистку через 5 минут после старта
+  setTimeout(cleanupOldFiles, 5 * 60 * 1000);
+  
+  // Запускаем очистку каждые 6 часов
+  setInterval(cleanupOldFiles, 6 * 60 * 60 * 1000);
+  console.log('🗑️ Автоочистка файлов настроена (каждые 6 часов)');
 });
 
 module.exports = app;

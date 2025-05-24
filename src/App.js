@@ -420,7 +420,8 @@ const NDAApprovalApp = () => {
       );
     }
     // --- Форма ручного согласования для всех остальных статусов или если не NDA ---
-    if (isStatusKnown) {
+    // Показываем форму согласования если есть статус или это не NDA
+    if (isStatusKnown || isNotNDA || analysisResult.summary) {
       return (
         <div className="min-h-screen bg-gray-50 py-12 px-4">
           <div className="max-w-3xl mx-auto">
@@ -430,17 +431,17 @@ const NDAApprovalApp = () => {
                 <AlertTriangle className="w-8 h-8 text-yellow-600" />
               </div>
               <h2 className="text-3xl font-bold text-gray-900 mb-2">
-                Требуется ручное согласование
+                {isNotNDA ? 'Документ не является NDA' : 'Требуется ручное согласование'}
               </h2>
               {isNotNDA && (
-                <div className="mb-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg flex items-center justify-center">
-                  <AlertTriangle className="w-5 h-5 text-yellow-600 mr-2 flex-shrink-0" />
-                  <span className="text-yellow-800 text-sm font-medium">
+                <div className="mb-4 p-4 bg-orange-50 border border-orange-200 rounded-lg flex items-center justify-center">
+                  <AlertTriangle className="w-5 h-5 text-orange-600 mr-2 flex-shrink-0" />
+                  <span className="text-orange-800 text-sm font-medium">
                     Документ не похож на NDA. Автоматическое согласование невозможно, требуется ручное согласование.
                   </span>
                 </div>
               )}
-              <p className="text-gray-600">{analysisResult.summary}</p>
+              <p className="text-gray-600">{analysisResult.summary || analysisResult.text || 'Анализ документа завершен'}</p>
               {analysisResult.confidence && (
                 <div className="mt-2">
                   <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-700">
@@ -530,11 +531,34 @@ const NDAApprovalApp = () => {
     }
     // --- Fallback: неизвестный статус ---
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4">
         <div className="bg-white p-8 rounded-lg shadow border border-gray-200 max-w-md w-full text-center">
-          <h2 className="text-2xl font-bold mb-4 text-gray-900">Неизвестный статус анализа</h2>
-          <p className="text-gray-600 mb-2">Статус: <span className="font-mono">{status || 'нет данных'}</span></p>
-          <button onClick={resetForm} className="mt-4 bg-blue-600 text-white py-2 px-4 rounded hover:bg-blue-700 transition">Вернуться к загрузке</button>
+          <div className="inline-flex items-center justify-center w-16 h-16 bg-gray-100 rounded-full mb-4">
+            <AlertTriangle className="w-8 h-8 text-gray-600" />
+          </div>
+          <h2 className="text-2xl font-bold mb-4 text-gray-900">Анализ завершен</h2>
+          <p className="text-gray-600 mb-4">{analysisResult.summary || analysisResult.text || 'Документ обработан, но статус неизвестен'}</p>
+          <div className="text-sm text-gray-500 mb-4">
+            <p>Статус: <span className="font-mono">{status || 'не определен'}</span></p>
+            {analysisResult.documentType && (
+              <p>Тип документа: <span className="font-mono">{analysisResult.documentType}</span></p>
+            )}
+          </div>
+          <div className="space-y-2">
+            <button 
+              onClick={handleSendToTelegram} 
+              disabled={loading}
+              className="w-full bg-blue-600 text-white py-2 px-4 rounded hover:bg-blue-700 transition disabled:opacity-50"
+            >
+              {loading ? 'Отправляем...' : 'Отправить на ручное согласование'}
+            </button>
+            <button 
+              onClick={resetForm} 
+              className="w-full bg-gray-100 text-gray-700 py-2 px-4 rounded hover:bg-gray-200 transition"
+            >
+              Загрузить новый документ
+            </button>
+          </div>
         </div>
       </div>
     );
