@@ -531,6 +531,12 @@ async function sendTelegramApprovalRequest(application) {
     criticalIssuesBlock = `\n\n⚠️ *Критические замечания:*\n${application.analysis.criticalIssues.map(issue => `• ${escapeMarkdown(issue)}`).join('\n')}`;
   }
   
+  // Формируем блок рекомендаций
+  let recommendationsBlock = '';
+  if (application.analysis.recommendations && application.analysis.recommendations.length > 0) {
+    recommendationsBlock = `\n\n💡 *Рекомендации:*\n${application.analysis.recommendations.map(rec => `• ${escapeMarkdown(rec)}`).join('\n')}`;
+  }
+  
   // Формируем блок комментария
   let commentBlock = '';
   if (application.comment) {
@@ -542,7 +548,7 @@ async function sendTelegramApprovalRequest(application) {
 📋 *Компания:* ${escapeMarkdown(application.companyName)}
 👤 *Ответственный:* ${escapeMarkdown(application.responsible)}
 📅 *Дата:* ${escapeMarkdown(new Date().toLocaleString('ru-RU'))}
-📄 *Файл:* ${escapeMarkdown(application.filename)}${keyPointsBlock}${summaryBlock}${criticalIssuesBlock}${commentBlock}`;
+📄 *Файл:* ${escapeMarkdown(application.filename)}${keyPointsBlock}${summaryBlock}${criticalIssuesBlock}${recommendationsBlock}${commentBlock}`;
 
   console.log('📱 Telegram filename:', application.filename);
   console.log('🔑 Short ID length:', Buffer.byteLength(`approve_${shortId}`, 'utf8'), 'bytes');
@@ -786,6 +792,16 @@ async function sendDecisionToChannel(application, decision, decidedBy) {
   if (application.analysis && application.analysis.summary) {
     summaryBlock = `\n\n🤖 *Заключение AI:*\n${escapeMarkdown(application.analysis.summary)}`;
   }
+  // Формируем блок критических замечаний для канала
+  let criticalIssuesChannelBlock = '';
+  if (application.analysis && application.analysis.criticalIssues && application.analysis.criticalIssues.length > 0) {
+    criticalIssuesChannelBlock = `\n\n⚠️ *Критические замечания:*\n${application.analysis.criticalIssues.map(issue => `• ${escapeMarkdown(issue)}`).join('\n')}`;
+  }
+  // Формируем блок рекомендаций для канала
+  let recommendationsChannelBlock = '';
+  if (application.analysis && application.analysis.recommendations && application.analysis.recommendations.length > 0) {
+    recommendationsChannelBlock = `\n\n💡 *Рекомендации:*\n${application.analysis.recommendations.map(rec => `• ${escapeMarkdown(rec)}`).join('\n')}`;
+  }
   
   // Определяем как согласован документ
   const isAutoApproved = decidedBy === 'AI';
@@ -795,21 +811,21 @@ async function sendDecisionToChannel(application, decision, decidedBy) {
     channelMessage = `✅ *${docUpperCase} ${statusHeader}*
 
 📋 *Компания:* ${escapeMarkdown(application.companyName)}
-👤 *Ответственный:* ${escapeMarkdown(application.responsible)}${keyPointsBlock}${summaryBlock}
+👤 *Ответственный:* ${escapeMarkdown(application.responsible)}${keyPointsBlock}${summaryBlock}${criticalIssuesChannelBlock}${recommendationsChannelBlock}
 
 👨‍💼 *Согласовал:* ${escapeMarkdown(decidedBy)}${commentSection}${downloadLine}`;
   } else if (decision === 'rejected') {
     channelMessage = `❌ *${docUpperCase} ОТКЛОНЕН${docType === 'договор' ? '' : 'О'}*
 
 📋 *Компания:* ${escapeMarkdown(application.companyName)}
-👤 *Ответственный:* ${escapeMarkdown(application.responsible)}${keyPointsBlock}${summaryBlock}
+👤 *Ответственный:* ${escapeMarkdown(application.responsible)}${keyPointsBlock}${summaryBlock}${criticalIssuesChannelBlock}${recommendationsChannelBlock}
 
 🚫 *Отклонил:* ${escapeMarkdown(decidedBy)}${commentSection}${downloadLine}`;
   } else if (decision === 'sent_to_lawyers') {
     channelMessage = `⚖️ *${docUpperCase} ТРЕБУЕТ КОНСУЛЬТАЦИИ ЮРИСТОВ*
 
 📋 *Компания:* ${escapeMarkdown(application.companyName)}
-👤 *Ответственный:* ${escapeMarkdown(application.responsible)}${keyPointsBlock}${summaryBlock}
+👤 *Ответственный:* ${escapeMarkdown(application.responsible)}${keyPointsBlock}${summaryBlock}${criticalIssuesChannelBlock}${recommendationsChannelBlock}
 
 👨‍⚖️ *Рекомендовал:* ${escapeMarkdown(decidedBy)}${commentSection}${downloadLine}`;
   }

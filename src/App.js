@@ -314,6 +314,7 @@ const NDAApprovalApp = () => {
       'approve', 'auto-approve', 'approved',
       'auto_approve', 'autoapproved', 'success', 'ok'
     ].includes((status || '').toLowerCase());
+    const isCritical = (status || '').toLowerCase() === 'critical';
     const isStatusKnown = !!status;
     const isNotNDA = !!analysisResult.notNDA;
     
@@ -457,6 +458,152 @@ const NDAApprovalApp = () => {
                     Попробовать снова с другим файлом
                   </button>
                 </div>
+              </div>
+            </div>
+
+            <div className="mt-6 text-center text-xs text-gray-500">
+              <p>Компания: {formData.companyName} • Ответственный: {formData.responsible}</p>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // Специальный экран для критических проблем в документе
+    if (isCritical) {
+      return (
+        <div className="min-h-screen bg-gray-50 py-12 px-4">
+          <div className="max-w-3xl mx-auto">
+            <div className="text-center mb-8">
+              <div className="inline-flex items-center justify-center w-16 h-16 bg-red-100 rounded-full mb-4">
+                <AlertTriangle className="w-8 h-8 text-red-600" />
+              </div>
+              <h2 className="text-3xl font-bold text-gray-900 mb-2">
+                Обнаружены критические проблемы в документе
+              </h2>
+              <p className="text-gray-600">{analysisResult.summary}</p>
+              {analysisResult.confidence && (
+                <div className="mt-2">
+                  <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-red-100 text-red-700">
+                    Уверенность AI: {Math.round(analysisResult.confidence * 100)}%
+                  </span>
+                </div>
+              )}
+            </div>
+
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+              {/* Critical Issues */}
+              {analysisResult.criticalIssues && analysisResult.criticalIssues.length > 0 && (
+                <div className="p-6 border-b border-gray-200 bg-red-50">
+                  <h3 className="text-sm font-semibold text-red-900 mb-4 flex items-center">
+                    <AlertTriangle className="w-4 h-4 text-red-600 mr-2" />
+                    Критические проблемы
+                  </h3>
+                  <div className="space-y-2">
+                    {analysisResult.criticalIssues.map((issue, index) => (
+                      <div key={index} className="flex items-start text-sm">
+                        <AlertTriangle className="w-4 h-4 text-red-500 mr-2 flex-shrink-0 mt-0.5" />
+                        <span className="text-red-800 font-medium">{issue}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Recommendations */}
+              {analysisResult.recommendations && analysisResult.recommendations.length > 0 && (
+                <div className="p-6 border-b border-gray-200 bg-blue-50">
+                  <h3 className="text-sm font-semibold text-blue-900 mb-4 flex items-center">
+                    <CheckCircle className="w-4 h-4 text-blue-600 mr-2" />
+                    Рекомендации по исправлению
+                  </h3>
+                  <div className="space-y-2">
+                    {analysisResult.recommendations.map((rec, index) => (
+                      <div key={index} className="flex items-start text-sm">
+                        <CheckCircle className="w-4 h-4 text-blue-500 mr-2 flex-shrink-0 mt-0.5" />
+                        <span className="text-blue-800">{rec}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Key Points if any */}
+              {analysisResult.keyPoints && analysisResult.keyPoints.length > 0 && (
+                <div className="p-6 border-b border-gray-200">
+                  <h3 className="text-sm font-semibold text-gray-900 mb-4 flex items-center">
+                    <span className="w-1.5 h-1.5 bg-gray-600 rounded-full mr-2"></span>
+                    Обнаруженные условия
+                  </h3>
+                  <div className="space-y-2">
+                    {analysisResult.keyPoints.map((point, index) => (
+                      <div key={index} className="flex items-start text-sm">
+                        <span className="w-1.5 h-1.5 bg-gray-400 rounded-full mr-2 mt-2 flex-shrink-0"></span>
+                        <span className="text-gray-700">{point}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Warning message */}
+              <div className="p-6 bg-yellow-50 border-l-4 border-yellow-400">
+                <div className="flex items-start">
+                  <AlertTriangle className="w-5 h-5 text-yellow-600 mr-2 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <h3 className="text-yellow-800 font-medium text-sm">Внимание!</h3>
+                    <p className="text-yellow-700 text-sm mt-1">
+                      Документ содержит критические проблемы и не может быть согласован автоматически. 
+                      Необходимо исправить указанные замечания или получить специальное разрешение.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Comment section */}
+              <div className="p-6 bg-gray-50 border-t border-gray-200">
+                <label className="flex items-center text-sm font-semibold text-gray-900 mb-3">
+                  <AlertTriangle className="w-4 h-4 mr-2 text-gray-500" />
+                  Комментарий для согласующего (обязательно)
+                </label>
+                <textarea
+                  value={formData.comment}
+                  onChange={(e) => setFormData(prev => ({ ...prev, comment: e.target.value }))}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all text-sm resize-none"
+                  placeholder="Опишите причину отправки документа с критическими проблемами на согласование..."
+                  rows="4"
+                  required
+                />
+                <p className="text-xs text-gray-500 mt-2">
+                  Укажите обоснование почему документ нужно рассмотреть несмотря на критические проблемы
+                </p>
+              </div>
+
+              {/* Actions */}
+              <div className="p-6">
+                <button
+                  onClick={handleSendToTelegram}
+                  disabled={loading || !formData.comment.trim()}
+                  className="w-full bg-red-600 text-white py-3 px-4 rounded-lg hover:bg-red-700 transition-all font-medium flex items-center justify-center disabled:opacity-50"
+                >
+                  {loading ? (
+                    <>
+                      <div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent mr-2"></div>
+                      Отправляем...
+                    </>
+                  ) : (
+                    <>
+                      <AlertTriangle className="w-5 h-5 mr-2" />
+                      Отправить на экспертное согласование
+                    </>
+                  )}
+                </button>
+                <button
+                  onClick={resetForm}
+                  className="w-full mt-3 bg-white text-gray-700 py-3 px-4 rounded-lg border border-gray-300 hover:bg-gray-50 transition-all font-medium"
+                >
+                  Загрузить исправленный документ
+                </button>
               </div>
             </div>
 
