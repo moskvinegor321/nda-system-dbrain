@@ -28,4 +28,14 @@ Thumbs.db
 # IDE
 .vscode/
 .idea/
+
+# N8N configurations with tokens
+*n8n*.json
+
+# Backup files
+*.backup
+
+# Temporary files
+*.tmp
+*.temp
 EOF

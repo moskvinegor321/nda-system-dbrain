@@ -1,70 +1,102 @@
-# Getting Started with Create React App
+# NDA System 📄⚡
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+Автоматизированная система анализа и согласования соглашений о неразглашении (NDA) с интеграцией Telegram Bot и AI анализом.
 
-## Available Scripts
+## 🚀 Возможности
 
-In the project directory, you can run:
+- **Интеллектуальный анализ** - AI анализ документов через N8N workflow
+- **Поддержка форматов** - PDF, DOCX, DOC, TXT, RTF
+- **Telegram интеграция** - Бот для согласования и уведомлений
+- **Google Drive** - Облачное хранение документов
+- **Автосогласование** - Автоматическое принятие решений для простых NDA
+- **Красивый UI** - Современный интерфейс в стиле Notion
 
-### `npm start`
+## 🏗️ Архитектура
 
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
+```
+Frontend (React) → Backend (Node.js) → Telegram Bot + Google Drive + N8N
+```
 
-The page will reload when you make changes.\
-You may also see any lint errors in the console.
+- **Frontend**: React 19 + Tailwind CSS
+- **Backend**: Node.js + Express
+- **Storage**: Google Drive API
+- **AI**: N8N Workflow Integration
+- **Notifications**: Telegram Bot API
 
-### `npm test`
+## 🚀 Быстрый старт
 
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+### Frontend
+```bash
+npm install
+npm start
+```
 
-### `npm run build`
+### Backend
+```bash
+cd backend/
+npm install
+npm start
+```
 
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
+### Environment Variables
+Создайте `.env` в папке `backend/`:
+```env
+TELEGRAM_BOT_TOKEN=your_bot_token
+TELEGRAM_CHAT_ID=your_chat_id
+TELEGRAM_CHANNEL_ID=your_channel_id
+GOOGLE_SERVICE_ACCOUNT_PATH=/path/to/service-account.json
+N8N_WEBHOOK_URL=your_n8n_webhook_url
+PORT=3001
+```
 
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
+## 📖 Документация
 
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
+- [Архитектура системы](docs/ARCHITECTURE.md)
+- [Развертывание](docs/DEPLOYMENT.md)
 
-### `npm run eject`
+## 🔄 Процесс работы
 
-**Note: this is a one-way operation. Once you `eject`, you can't go back!**
+1. **Загрузка** - Пользователь загружает NDA документ
+2. **Анализ** - AI анализирует содержимое и риски
+3. **Решение** - Автоматическое согласование или отправка в Telegram
+4. **Уведомление** - Результат публикуется в канал
 
-If you aren't satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
+## 🛠️ Технологии
 
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you're on your own.
+**Frontend:**
+- React 19
+- Tailwind CSS
+- Lucide Icons
 
-You don't have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn't feel obligated to use this feature. However we understand that this tool wouldn't be useful if you couldn't customize it when you are ready for it.
+**Backend:**
+- Node.js + Express
+- PDF-Parse, Mammoth
+- Google Drive API
+- Telegram Bot API
 
-## Learn More
+**External:**
+- N8N (AI Workflow)
+- Google Drive
+- Telegram Bot
 
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
+## 📁 Структура проекта
 
-To learn React, check out the [React documentation](https://reactjs.org/).
+```
+nda-system/
+├── src/                 # Frontend React компоненты
+├── public/              # Статические файлы
+├── backend/             # Backend Node.js сервер
+├── docs/                # Документация
+├── config/              # Конфигурационные файлы
+└── README.md
+```
 
-### Code Splitting
+## 🌐 Развертывание
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/code-splitting](https://facebook.github.io/create-react-app/docs/code-splitting)
+**Production URLs:**
+- Frontend: https://nda-analyzer-dbrain.netlify.app
+- Backend: https://nda-system-dbrain.onrender.com
 
-### Analyzing the Bundle Size
+## 📝 Лицензия
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size](https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size)
-
-### Making a Progressive Web App
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app](https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app)
-
-### Advanced Configuration
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/advanced-configuration](https://facebook.github.io/create-react-app/docs/advanced-configuration)
-
-### Deployment
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/deployment](https://facebook.github.io/create-react-app/docs/deployment)
-
-### `npm run build` fails to minify
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)
+MIT License
