@@ -18,8 +18,25 @@ console.log('PORT:', process.env.PORT);
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-app.use(cors());
-app.use(express.json());
+// Улучшенные CORS настройки
+app.use(cors({
+  origin: ['http://localhost:3000', 'https://nda-analyzer-dbrain.netlify.app', 'https://nda-system-dbrain.onrender.com'],
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true
+}));
+
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+
+// Middleware для preflight запросов
+app.options('*', (req, res) => {
+  res.header('Access-Control-Allow-Origin', req.headers.origin || '*');
+  res.header('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type,Authorization');
+  res.header('Access-Control-Allow-Credentials', 'true');
+  res.sendStatus(200);
+});
 
 // Настройка загрузки файлов
 const storage = multer.diskStorage({
@@ -334,16 +351,35 @@ app.post('/api/analyze-nda', upload.single('file'), async (req, res) => {
       throw new Error(`N8N вернул ошибку ${n8nResponse.status}: ${errorText}`);
     }
 
-    // Получаем результат анализа
-    const analysisResult = await n8nResponse.json();
+    // Получаем результат анализа с защитой от плохого JSON
+    let analysisResult;
+    try {
+      const responseText = await n8nResponse.text();
+      console.log('📋 N8N response text:', responseText.substring(0, 500));
+      
+      // Пытаемся распарсить JSON
+      analysisResult = JSON.parse(responseText);
+    } catch (parseError) {
+      console.error('❌ Ошибка парсинга JSON от N8N:', parseError.message);
+      // Fallback - создаем базовый результат
+      analysisResult = {
+        status: 'manual_review',
+        summary: 'Ошибка обработки результата анализа. Требуется ручное согласование.',
+        text: 'Не удалось получить корректный ответ от системы анализа',
+        confidence: 0,
+        keyPoints: [],
+        criticalIssues: ['Ошибка в системе анализа']
+      };
+    }
 
     // Гарантируем, что status всегда есть
     if (!analysisResult.status) {
       if (typeof analysisResult.text === 'string' && /автоматически согласовано/i.test(analysisResult.text)) {
         analysisResult.status = 'approved';
         analysisResult.summary = analysisResult.text;
+      } else {
+        analysisResult.status = 'manual_review';
       }
-      // Можно добавить другие эвристики для других статусов
     }
 
     console.log('✅ Анализ завершен:', analysisResult.status);
@@ -373,8 +409,20 @@ app.post('/api/analyze-nda', upload.single('file'), async (req, res) => {
 
   } catch (error) {
     console.error('💥 Общая ошибка анализа документа:', error);
+    
+    // Удаляем файл в случае ошибки
+    try {
+      if (file && file.path) {
+        await fs.unlink(file.path);
+        console.log('🗑️ Файл удален после ошибки');
+      }
+    } catch (unlinkError) {
+      console.error('❌ Ошибка удаления файла:', unlinkError.message);
+    }
+    
     res.status(500).json({ 
       error: 'Ошибка анализа документа: ' + error.message,
+      details: error.name === 'SyntaxError' ? 'Ошибка обработки данных' : error.message,
       stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
     });
   }

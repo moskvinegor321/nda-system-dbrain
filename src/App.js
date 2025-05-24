@@ -100,10 +100,23 @@ const NDAApprovalApp = () => {
         body: form
       });
 
-      const result = await response.json();
+      let result;
+      try {
+        const responseText = await response.text();
+        console.log('Raw response:', responseText.substring(0, 200));
+        
+        if (responseText.trim()) {
+          result = JSON.parse(responseText);
+        } else {
+          throw new Error('Пустой ответ от сервера');
+        }
+      } catch (parseError) {
+        console.error('JSON parse error:', parseError);
+        throw new Error('Ошибка обработки ответа сервера');
+      }
 
       if (!response.ok) {
-        throw new Error(result.error || `HTTP error! status: ${response.status}`);
+        throw new Error(result.error || result.details || `HTTP error! status: ${response.status}`);
       }
 
       console.log('Результат анализа:', result);
@@ -112,7 +125,13 @@ const NDAApprovalApp = () => {
 
     } catch (error) {
       console.error('Ошибка анализа:', error);
-      setError(`Ошибка анализа: ${error.message}`);
+      if (error.message.includes('Failed to fetch')) {
+        setError('Ошибка подключения к серверу. Проверьте интернет-соединение.');
+      } else if (error.message.includes('CORS')) {
+        setError('Ошибка CORS. Обратитесь к администратору.');
+      } else {
+        setError(`Ошибка анализа: ${error.message}`);
+      }
     } finally {
       setLoading(false);
     }
