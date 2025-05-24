@@ -18,6 +18,34 @@ const NDAApprovalApp = () => {
   const dropRef = useRef();
   const [dragActive, setDragActive] = useState(false);
 
+  // Функция определения типа документа
+  const getDocumentType = (analysisResult) => {
+    if (analysisResult?.documentType) {
+      return analysisResult.documentType.toLowerCase();
+    }
+    
+    const summary = (analysisResult?.summary || analysisResult?.text || '').toLowerCase();
+    
+    if (summary.includes('nda') || summary.includes('соглашение о неразглашении') || summary.includes('конфиденциальность')) {
+      return 'nda';
+    }
+    
+    if (summary.includes('договор') || summary.includes('контракт') || summary.includes('соглашение')) {
+      return 'договор';
+    }
+    
+    return 'документ';
+  };
+
+  // Функция получения названия документа для интерфейса
+  const getDocumentDisplayName = (docType) => {
+    switch(docType) {
+      case 'nda': return 'NDA';
+      case 'договор': return 'договор';
+      default: return 'документ';
+    }
+  };
+
   const handleFileUpload = (event) => {
     const file = event.target.files[0];
     const allowedExtensions = ['.pdf', '.doc', '.docx', '.txt', '.rtf'];
@@ -130,7 +158,7 @@ const NDAApprovalApp = () => {
             <div className="inline-flex items-center justify-center w-16 h-16 bg-blue-100 rounded-full mb-4">
               <FileText className="w-8 h-8 text-blue-600" />
             </div>
-            <h1 className="text-3xl font-bold text-gray-900">NDA Analysis System</h1>
+            <h1 className="text-3xl font-bold text-gray-900">Document Analysis System</h1>
             <p className="mt-2 text-gray-600">Автоматический анализ и согласование документов</p>
           </div>
 
@@ -148,7 +176,7 @@ const NDAApprovalApp = () => {
               <div>
                 <label className="flex items-center text-sm font-medium text-gray-700 mb-3">
                   <FileText className="w-4 h-4 mr-2 text-gray-500" />
-                  NDA документ
+                  Документ для анализа
                 </label>
                 <div className="relative">
                   <input
@@ -264,6 +292,10 @@ const NDAApprovalApp = () => {
     ].includes((status || '').toLowerCase());
     const isStatusKnown = !!status;
     const isNotNDA = !!analysisResult.notNDA;
+    
+    // Определяем тип документа
+    const docType = getDocumentType(analysisResult);
+    const docDisplayName = getDocumentDisplayName(docType);
 
     // --- Функция отправки на согласование в Telegram ---
     const handleSendToTelegram = async () => {
@@ -312,7 +344,7 @@ const NDAApprovalApp = () => {
         });
         const result = await response.json();
         if (response.ok) {
-          alert('✅ NDA автоматически согласовано!\n\nИнформация отправлена в Telegram канал для уведомления команды.');
+          alert(`✅ ${docDisplayName} автоматически согласован${docType === 'договор' ? '' : 'о'}!\n\nИнформация отправлена в Telegram канал для уведомления команды.`);
           resetForm();
         } else {
           throw new Error(result.error || 'Ошибка отправки в Telegram');
@@ -336,7 +368,7 @@ const NDAApprovalApp = () => {
                 <CheckCircle className="w-8 h-8 text-green-600" />
               </div>
               <h2 className="text-3xl font-bold text-gray-900 mb-2">
-                NDA автоматически согласовано
+                {docDisplayName} автоматически согласован{docType === 'договор' ? '' : 'о'}
               </h2>
               <p className="text-gray-600">{analysisResult.summary}</p>
               {analysisResult.confidence && (
@@ -386,7 +418,7 @@ const NDAApprovalApp = () => {
                 Подтвердить автоматическое согласование
               </button>
               <p className="text-sm text-gray-600 text-center mt-2">
-                NDA соответствует всем требованиям и может быть согласовано автоматически
+                {docDisplayName} соответствует всем требованиям и может быть согласован{docType === 'договор' ? '' : 'о'} автоматически
               </p>
             </div>
 
@@ -406,7 +438,7 @@ const NDAApprovalApp = () => {
                 </p>
                 <p className="flex items-start">
                   <span className="inline-block w-1.5 h-1.5 bg-gray-400 rounded-full mr-2 mt-1.5"></span>
-                  Можно приступать к подписанию NDA
+                  Можно приступать к подписанию {docDisplayName}
                 </p>
               </div>
             </div>
@@ -431,13 +463,13 @@ const NDAApprovalApp = () => {
                 <AlertTriangle className="w-8 h-8 text-yellow-600" />
               </div>
               <h2 className="text-3xl font-bold text-gray-900 mb-2">
-                {isNotNDA ? 'Документ не является NDA' : 'Требуется ручное согласование'}
+                {isNotNDA ? `Документ не является ${docType === 'nda' ? 'NDA' : 'стандартным договором'}` : `Требуется ручное согласование ${docDisplayName}`}
               </h2>
               {isNotNDA && (
                 <div className="mb-4 p-4 bg-orange-50 border border-orange-200 rounded-lg flex items-center justify-center">
                   <AlertTriangle className="w-5 h-5 text-orange-600 mr-2 flex-shrink-0" />
                   <span className="text-orange-800 text-sm font-medium">
-                    Документ не похож на NDA. Автоматическое согласование невозможно, требуется ручное согласование.
+                    Документ не подходит для автоматического согласования. Требуется ручное согласование.
                   </span>
                 </div>
               )}

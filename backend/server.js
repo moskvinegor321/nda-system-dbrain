@@ -9,7 +9,7 @@ const crypto = require('crypto');
 const mammoth = require('mammoth');
 const { cleanupOldFiles } = require('./cleanup');
 
-console.log('🚀 Запуск сервера NDA анализа...');
+console.log('🚀 Запуск сервера анализа документов...');
 console.log('N8N_WEBHOOK_URL:', process.env.N8N_WEBHOOK_URL);
 console.log('TELEGRAM_BOT_TOKEN:', process.env.TELEGRAM_BOT_TOKEN ? 'установлен' : 'НЕ УСТАНОВЛЕН');
 console.log('TELEGRAM_CHANNEL_ID:', process.env.TELEGRAM_CHANNEL_ID || 'НЕ УСТАНОВЛЕН');
@@ -55,6 +55,37 @@ const upload = multer({
 
 // Хранение заявок на согласование
 const applications = new Map();
+
+// Функция определения типа документа
+function getDocumentType(analysisResult, filename) {
+  // Проверяем по результату анализа
+  if (analysisResult.documentType) {
+    return analysisResult.documentType.toLowerCase();
+  }
+  
+  // Проверяем по тексту результата анализа
+  const summary = (analysisResult.summary || analysisResult.text || '').toLowerCase();
+  
+  if (summary.includes('nda') || summary.includes('соглашение о неразглашении') || summary.includes('конфиденциальность')) {
+    return 'nda';
+  }
+  
+  if (summary.includes('договор') || summary.includes('контракт') || summary.includes('соглашение')) {
+    return 'договор';
+  }
+  
+  // По умолчанию - документ
+  return 'документ';
+}
+
+// Функция получения названия документа для интерфейса
+function getDocumentDisplayName(docType) {
+  switch(docType) {
+    case 'nda': return 'NDA';
+    case 'договор': return 'договор';
+    default: return 'документ';
+  }
+}
 
 // Хранилище для маппинга коротких ID к полным токенам
 const tokenMap = new Map();
@@ -341,7 +372,7 @@ app.post('/api/analyze-nda', upload.single('file'), async (req, res) => {
     res.json(analysisResult);
 
   } catch (error) {
-    console.error('💥 Общая ошибка анализа NDA:', error);
+    console.error('💥 Общая ошибка анализа документа:', error);
     res.status(500).json({ 
       error: 'Ошибка анализа документа: ' + error.message,
       stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
@@ -375,7 +406,7 @@ app.post('/api/send-approval-request', async (req, res) => {
       await sendDecisionToChannel(application, 'approved', 'AI');
       return res.json({
         success: true,
-        message: 'NDA автоматически согласовано и отправлено в канал',
+        message: 'Документ автоматически согласован и отправлен в канал',
         autoApproved: true
       });
     }
@@ -439,7 +470,11 @@ async function sendTelegramApprovalRequest(application) {
     summaryBlock = `\n\n*Заключение AI:*\n${escapeMarkdown(application.analysis.summary)}`;
   }
 
-  const message = `🔔 *Требуется согласование NDA*\n\n📋 *Компания:* ${escapeMarkdown(application.companyName)}\n👤 *Ответственный:* ${escapeMarkdown(application.responsible)}\n📅 *Дата:* ${escapeMarkdown(new Date().toLocaleString('ru-RU'))}\n📄 *Файл:* ${escapeMarkdown(application.filename)}${keyPointsBlock}${summaryBlock}\n\n${application.analysis.criticalIssues && application.analysis.criticalIssues.length > 0 ? `*Критические замечания:*\n${application.analysis.criticalIssues.map(issue => `• ${escapeMarkdown(issue)}`).join('\n')}` : ''}\n\n${application.comment ? `*Комментарий специалиста:*\n${escapeMarkdown(application.comment)}` : ''}`;
+  // Определяем тип документа
+  const docType = getDocumentType(application.analysis);
+  const docDisplayName = getDocumentDisplayName(docType);
+  
+  const message = `🔔 *Требуется согласование ${docDisplayName}*\n\n📋 *Компания:* ${escapeMarkdown(application.companyName)}\n👤 *Ответственный:* ${escapeMarkdown(application.responsible)}\n📅 *Дата:* ${escapeMarkdown(new Date().toLocaleString('ru-RU'))}\n📄 *Файл:* ${escapeMarkdown(application.filename)}${keyPointsBlock}${summaryBlock}\n\n${application.analysis.criticalIssues && application.analysis.criticalIssues.length > 0 ? `*Критические замечания:*\n${application.analysis.criticalIssues.map(issue => `• ${escapeMarkdown(issue)}`).join('\n')}` : ''}\n\n${application.comment ? `*Комментарий специалиста:*\n${escapeMarkdown(application.comment)}` : ''}`;
 
   console.log('📱 Telegram filename:', application.filename);
   console.log('🔑 Short ID length:', Buffer.byteLength(`approve_${shortId}`, 'utf8'), 'bytes');
@@ -452,7 +487,7 @@ async function sendTelegramApprovalRequest(application) {
       ],
       [
         { text: '⚖️ Нужна консультация юристов', callback_data: String(`lawyers_${shortId}`) },
-        { text: '📄 Скачать NDA', url: String(downloadUrl) }
+        { text: `📄 Скачать ${docDisplayName}`, url: String(downloadUrl) }
       ]
     ]
   };
@@ -555,7 +590,9 @@ app.post('/api/telegram-webhook', async (req, res) => {
 
       await editMessageWithResult(messageData.chat.id, messageData.message_id, application, 'approved');
       await sendDecisionToChannel(application, 'approved', from.username || from.first_name);
-      await answerCallbackQuery(callbackId, '✅ NDA согласовано!');
+      const docType = getDocumentType(application.analysis);
+      const docDisplayName = getDocumentDisplayName(docType);
+      await answerCallbackQuery(callbackId, `✅ ${docDisplayName} согласован${docType === 'договор' ? '' : 'о'}!`);
 
     } else if (action === 'reject') {
       console.log('❌ Обрабатываем отклонение...');
@@ -567,7 +604,9 @@ app.post('/api/telegram-webhook', async (req, res) => {
 
       await editMessageWithResult(messageData.chat.id, messageData.message_id, application, 'rejected');
       await sendDecisionToChannel(application, 'rejected', from.username || from.first_name);
-      await answerCallbackQuery(callbackId, '❌ NDA отклонено');
+      const docType = getDocumentType(application.analysis);
+      const docDisplayName = getDocumentDisplayName(docType);
+      await answerCallbackQuery(callbackId, `❌ ${docDisplayName} отклонен${docType === 'договор' ? '' : 'о'}`);
     } else if (action === 'lawyers') {
       console.log('⚖️ Рекомендуем консультацию юристов...');
       
@@ -658,11 +697,17 @@ async function sendDecisionToChannel(application, decision, decidedBy) {
   const escapeMarkdown = (text) => {
     return text ? text.replace(/[_*\[\]()~`>#+=|{}.!-]/g, '\\$&') : '';
   };
+  
+  // Определяем тип документа
+  const docType = getDocumentType(application.analysis);
+  const docDisplayName = getDocumentDisplayName(docType);
+  const docUpperCase = docDisplayName.toUpperCase();
+  
   const commentSection = application.comment ? 
     `\n\n💬 *Комментарий:*\n${escapeMarkdown(application.comment)}` : '';
   // Формируем ссылку на скачивание
   let downloadUrl = application.analysis?.downloadUrl || `${process.env.BACKEND_URL || 'https://nda-system-dbrain.onrender.com'}/api/download/${encodeURIComponent(application.filename)}`;
-  const downloadLine = `\n\n📄 [Скачать NDA](${downloadUrl})`;
+  const downloadLine = `\n\n📄 [Скачать ${docDisplayName}](${downloadUrl})`;
   // Формируем блок ключевых условий
   let keyPointsBlock = '';
   if (application.analysis && Array.isArray(application.analysis.keyPoints) && application.analysis.keyPoints.length > 0) {
@@ -673,12 +718,17 @@ async function sendDecisionToChannel(application, decision, decidedBy) {
   if (application.analysis && application.analysis.summary) {
     summaryBlock = `\n\n*Заключение AI:*\n${escapeMarkdown(application.analysis.summary)}`;
   }
+  
+  // Определяем как согласован документ
+  const isAutoApproved = decidedBy === 'AI';
+  const statusHeader = isAutoApproved ? 'СОГЛАСОВАН АВТОМАТИЧЕСКИ' : 'СОГЛАСОВАН';
+  
   if (decision === 'approved') {
-    channelMessage = `✅ *NDA СОГЛАСОВАНО*\n\n📋 *Компания:* ${escapeMarkdown(application.companyName)}\n👤 *Ответственный:* ${escapeMarkdown(application.responsible)}${keyPointsBlock}${summaryBlock}\n\n*Согласовал:* ${escapeMarkdown(decidedBy)}${commentSection}${downloadLine}`;
+    channelMessage = `✅ *${docUpperCase} ${statusHeader}*\n\n📋 *Компания:* ${escapeMarkdown(application.companyName)}\n👤 *Ответственный:* ${escapeMarkdown(application.responsible)}${keyPointsBlock}${summaryBlock}\n\n*Согласовал:* ${escapeMarkdown(decidedBy)}${commentSection}${downloadLine}`;
   } else if (decision === 'rejected') {
-    channelMessage = `❌ *NDA ОТКЛОНЕНО*\n\n📋 *Компания:* ${escapeMarkdown(application.companyName)}\n👤 *Ответственный:* ${escapeMarkdown(application.responsible)}${keyPointsBlock}${summaryBlock}\n\n*Отклонил:* ${escapeMarkdown(decidedBy)}${commentSection}${downloadLine}`;
+    channelMessage = `❌ *${docUpperCase} ОТКЛОНЕН${docType === 'договор' ? '' : 'О'}*\n\n📋 *Компания:* ${escapeMarkdown(application.companyName)}\n👤 *Ответственный:* ${escapeMarkdown(application.responsible)}${keyPointsBlock}${summaryBlock}\n\n*Отклонил:* ${escapeMarkdown(decidedBy)}${commentSection}${downloadLine}`;
   } else if (decision === 'sent_to_lawyers') {
-    channelMessage = `⚖️ *NDA ТРЕБУЕТ КОНСУЛЬТАЦИИ ЮРИСТОВ*\n\n📋 *Компания:* ${escapeMarkdown(application.companyName)}\n👤 *Ответственный:* ${escapeMarkdown(application.responsible)}${keyPointsBlock}${summaryBlock}\n\n*Рекомендовал:* ${escapeMarkdown(decidedBy)}${commentSection}${downloadLine}`;
+    channelMessage = `⚖️ *${docUpperCase} ТРЕБУЕТ КОНСУЛЬТАЦИИ ЮРИСТОВ*\n\n📋 *Компания:* ${escapeMarkdown(application.companyName)}\n👤 *Ответственный:* ${escapeMarkdown(application.responsible)}${keyPointsBlock}${summaryBlock}\n\n*Рекомендовал:* ${escapeMarkdown(decidedBy)}${commentSection}${downloadLine}`;
   }
   try {
     console.log('📤 Отправляем сообщение в канал...');
