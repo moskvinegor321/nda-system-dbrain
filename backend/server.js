@@ -599,6 +599,9 @@ async function sendTelegramApprovalRequest(application) {
 
 // Обновляем обработчик webhook для работы с короткими ID
 app.post('/api/telegram-webhook', async (req, res) => {
+  // Сразу отвечаем Telegram, чтобы избежать timeout
+  res.json({ ok: true });
+  
   try {
     console.log('📨 Получен Telegram webhook');
     
@@ -607,7 +610,7 @@ app.post('/api/telegram-webhook', async (req, res) => {
     
     if (!callback_query) {
       console.log('⚠️ Нет callback_query в запросе');
-      return res.json({ ok: true });
+      return;
     }
 
     const { data, from, id: callbackId } = callback_query;
@@ -615,11 +618,12 @@ app.post('/api/telegram-webhook', async (req, res) => {
     
     console.log('🔘 Callback data:', data);
     console.log('👤 От пользователя:', from.username || from.first_name);
+    console.log('⏰ Время получения:', new Date().toLocaleString('ru-RU'));
 
     if (!data || !data.includes('_')) {
       console.log('⚠️ Неверный формат callback data:', data);
       await answerCallbackQuery(callbackId, 'Неверный формат команды');
-      return res.json({ ok: true });
+      return;
     }
 
     const [action, shortId] = data.split('_');
@@ -627,9 +631,12 @@ app.post('/api/telegram-webhook', async (req, res) => {
     
     if (!tokenData) {
       console.log('⚠️ Токен не найден для shortId:', shortId);
-      await answerCallbackQuery(callbackId, 'Ошибка: действие устарело');
-      return res.json({ ok: true });
+      console.log('🗂️ Доступные токены:', Array.from(tokenMap.keys()));
+      await answerCallbackQuery(callbackId, 'Ошибка: действие устарело или недоступно');
+      return;
     }
+
+    console.log('✅ Токен найден, возраст:', Math.round((Date.now() - tokenData.createdAt) / 1000 / 60), 'минут');
 
     const token = tokenData.token;
     const application = applications.get(token) || {
@@ -695,24 +702,8 @@ app.post('/api/telegram-webhook', async (req, res) => {
       await answerCallbackQuery(callbackId, '⚖️ Нужна консультация юристов');
     }
 
-    // Добавляем функцию очистки старых токенов
-    function cleanupOldTokens() {
-      const now = Date.now();
-      for (const [shortId, data] of tokenMap.entries()) {
-        if (now - data.createdAt > 24 * 60 * 60 * 1000) { // 24 часа
-          tokenMap.delete(shortId);
-        }
-      }
-    }
-
-    // Запускаем очистку старых токенов каждый час
-    setInterval(cleanupOldTokens, 60 * 60 * 1000);
-    
-    res.json({ ok: true });
-
   } catch (error) {
     console.error('💥 Ошибка обработки Telegram webhook:', error);
-    res.json({ ok: true });
   }
 });
 
@@ -916,12 +907,32 @@ app.listen(PORT, () => {
   console.log(`📄 Поддержка PDF с ЭЦП: включена`);
   console.log(`📢 Канал для автосогласований: ${config.telegram.channelId || 'НЕ НАСТРОЕН'}`);
   
+  // Функция очистки старых токенов
+  function cleanupOldTokens() {
+    const now = Date.now();
+    let deletedCount = 0;
+    for (const [shortId, data] of tokenMap.entries()) {
+      // Удаляем токены старше 24 часов
+      if (now - data.createdAt > 24 * 60 * 60 * 1000) {
+        tokenMap.delete(shortId);
+        deletedCount++;
+      }
+    }
+    if (deletedCount > 0) {
+      console.log(`🧹 Очищено старых токенов: ${deletedCount}`);
+    }
+  }
+  
   // Запускаем первую очистку через 5 минут после старта
   setTimeout(cleanupOldFiles, 5 * 60 * 1000);
   
   // Запускаем очистку каждые 6 часов
   setInterval(cleanupOldFiles, 6 * 60 * 60 * 1000);
   console.log('🗑️ Автоочистка файлов настроена (каждые 6 часов)');
+  
+  // Запускаем очистку токенов каждые 30 минут
+  setInterval(cleanupOldTokens, 30 * 60 * 1000);
+  console.log('🧹 Автоочистка токенов настроена (каждые 30 минут)');
 });
 
 module.exports = app;
