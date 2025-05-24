@@ -431,7 +431,7 @@ app.post('/api/analyze-nda', upload.single('file'), async (req, res) => {
 // API для отправки в Telegram на согласование
 app.post('/api/send-approval-request', async (req, res) => {
   try {
-    const { responsible, companyName, analysis, filename, comment } = req.body;
+    const { responsible, companyName, analysis, filename, comment, overrideAutoApproval } = req.body;
 
     console.log('📨 Получен запрос на отправку в Telegram:', { responsible, companyName, filename });
 
@@ -444,15 +444,16 @@ app.post('/api/send-approval-request', async (req, res) => {
       companyName,
       analysis,
       filename,
-      comment
+      comment,
+      overrideAutoApproval: !!overrideAutoApproval
     };
 
     // Автосогласование ТОЛЬКО для NDA документов
     const status = (analysis && (analysis.status || analysis.json?.status || analysis.data?.status || '')).toLowerCase();
     const docType = getDocumentType(analysis);
     
-    // Проверяем: документ должен быть NDA И иметь статус автосогласования
-    if (docType === 'nda' && (status === 'approve' || status === 'auto-approve' || status === 'auto_approve' || status === 'autoapproved')) {
+    // Проверяем: документ должен быть NDA И иметь статус автосогласования И НЕ переопределено пользователем
+    if (!overrideAutoApproval && docType === 'nda' && (status === 'approve' || status === 'auto-approve' || status === 'auto_approve' || status === 'autoapproved')) {
       console.log('✅ NDA автоматически согласовано');
       await sendDecisionToChannel(application, 'approved', 'AI');
       return res.json({

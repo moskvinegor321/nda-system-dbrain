@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Upload, CheckCircle, AlertTriangle, FileText, Building, User, HelpCircle, Info, Clock, Shield } from 'lucide-react';
+import { Upload, CheckCircle, AlertTriangle, FileText, Building, User, HelpCircle, Shield } from 'lucide-react';
 
 // API Configuration
 const API_BASE_URL = 'https://nda-system-dbrain.onrender.com';
@@ -18,6 +18,8 @@ const NDAApprovalApp = () => {
   const dropRef = useRef();
   const [dragActive, setDragActive] = useState(false);
   const [showInstructions, setShowInstructions] = useState(false);
+  const [showManualReview, setShowManualReview] = useState(false);
+  const [manualReviewComment, setManualReviewComment] = useState('');
 
   // Компонент инструкций
   const InstructionsModal = () => {
@@ -526,6 +528,37 @@ const NDAApprovalApp = () => {
         setLoading(false);
       }
     };
+
+    // --- Функция отправки автоодобренного документа на ручное согласование ---
+    const handleSendToTelegramWithOverride = async () => {
+      try {
+        setLoading(true);
+        const response = await fetch(`${API_BASE_URL}/api/send-approval-request`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            responsible: formData.responsible,
+            companyName: formData.companyName,
+            analysis: analysisResult,
+            filename: formData.file?.name || '',
+            comment: manualReviewComment,
+            overrideAutoApproval: true  // Флаг, что это переопределение автосогласования
+          })
+        });
+        const result = await response.json();
+        if (response.ok) {
+          alert('📋 Документ отправлен на экспертное согласование!\n\nЭксперты получили уведомление для дополнительной проверки автоодобренного документа.');
+          resetForm();
+        } else {
+          throw new Error(result.error || 'Ошибка отправки в Telegram');
+        }
+      } catch (error) {
+        console.error('Ошибка отправки на ручное согласование:', error);
+        alert('Ошибка: ' + error.message);
+      } finally {
+        setLoading(false);
+      }
+    };
     
     // Специальный экран для ошибок обработки
     if (isProcessingError) {
@@ -840,16 +873,100 @@ const NDAApprovalApp = () => {
 
             {/* Actions */}
             <div className="p-6">
-              <button
-                onClick={handleAutoApprove}
-                className="w-full bg-green-600 text-white py-3 px-4 rounded-lg hover:bg-green-700 transition-all font-medium flex items-center justify-center"
-              >
-                <CheckCircle className="w-5 h-5 mr-2" />
-                Подтвердить автоматическое согласование
-              </button>
-              <p className="text-sm text-gray-600 text-center mt-2">
-                {docDisplayName} соответствует всем требованиям и может быть согласован{docType === 'договор' ? '' : 'о'} автоматически
-              </p>
+              {!showManualReview ? (
+                <>
+                  <button
+                    onClick={handleAutoApprove}
+                    className="w-full bg-green-600 text-white py-3 px-4 rounded-lg hover:bg-green-700 transition-all font-medium flex items-center justify-center"
+                  >
+                    <CheckCircle className="w-5 h-5 mr-2" />
+                    Подтвердить автоматическое согласование
+                  </button>
+                  <p className="text-sm text-gray-600 text-center mt-2">
+                    {docDisplayName} соответствует всем требованиям и может быть согласован{docType === 'договор' ? '' : 'о'} автоматически
+                  </p>
+                  
+                  {/* Дополнительная опция для ручного согласования */}
+                  <div className="mt-6 pt-4 border-t border-gray-200">
+                    <div className="text-center">
+                      <p className="text-sm text-gray-600 mb-3">
+                        Не согласны с автоматическим решением? Видите спорные условия?
+                      </p>
+                      <button
+                        onClick={() => setShowManualReview(true)}
+                        className="inline-flex items-center px-4 py-2 bg-amber-100 text-amber-700 rounded-lg hover:bg-amber-200 transition-all text-sm font-medium"
+                      >
+                        <AlertTriangle className="w-4 h-4 mr-2" />
+                        Отправить на экспертное согласование
+                      </button>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <>
+                  {/* Форма для ручного согласования автоодобренного документа */}
+                  <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-4">
+                    <div className="flex items-start">
+                      <AlertTriangle className="w-5 h-5 text-amber-600 mr-2 flex-shrink-0 mt-0.5" />
+                      <div>
+                        <h3 className="text-amber-800 font-medium text-sm mb-1">Отправка на экспертное согласование</h3>
+                        <p className="text-amber-700 text-sm">
+                          Документ был автоматически одобрен, но вы можете отправить его на дополнительную экспертную проверку.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="space-y-4">
+                    <div>
+                      <label className="flex items-center text-sm font-semibold text-gray-900 mb-3">
+                        <AlertTriangle className="w-4 h-4 mr-2 text-gray-500" />
+                        Комментарий для экспертов (обязательно)
+                      </label>
+                      <textarea
+                        value={manualReviewComment}
+                        onChange={(e) => setManualReviewComment(e.target.value)}
+                        className="w-full px-4 py-3 border border-amber-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all text-sm resize-none"
+                        placeholder="Объясните, почему требуется экспертная проверка (например: 'штраф кажется слишком большим', 'срок действия не подходит', 'нестандартные условия конфиденциальности')..."
+                        rows="4"
+                        required
+                      />
+                      <p className="text-xs text-amber-600 mt-2">
+                        Укажите конкретные моменты, которые вызывают сомнения, чтобы эксперты могли сосредоточиться на них
+                      </p>
+                    </div>
+
+                    <div className="flex space-x-3">
+                      <button
+                        onClick={() => handleSendToTelegramWithOverride()}
+                        disabled={loading || !manualReviewComment.trim()}
+                        className="flex-1 bg-amber-600 text-white py-3 px-4 rounded-lg hover:bg-amber-700 transition-all font-medium flex items-center justify-center disabled:opacity-50"
+                      >
+                        {loading ? (
+                          <>
+                            <div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent mr-2"></div>
+                            Отправляем...
+                          </>
+                        ) : (
+                          <>
+                            <FileText className="w-5 h-5 mr-2" />
+                            Отправить экспертам
+                          </>
+                        )}
+                      </button>
+                      <button
+                        onClick={() => {
+                          setShowManualReview(false);
+                          setManualReviewComment('');
+                        }}
+                        className="px-4 py-3 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-all font-medium"
+                      >
+                        Отмена
+                      </button>
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
 
             {/* Process Info */}
