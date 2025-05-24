@@ -451,7 +451,7 @@ async function sendTelegramApprovalRequest(application) {
         { text: '❌ Отклонить', callback_data: String(`reject_${shortId}`) }
       ],
       [
-        { text: '⚖️ Отправить юристам', callback_data: String(`lawyers_${shortId}`) },
+        { text: '⚖️ Нужна консультация юристов', callback_data: String(`lawyers_${shortId}`) },
         { text: '📄 Скачать NDA', url: String(downloadUrl) }
       ]
     ]
@@ -569,7 +569,7 @@ app.post('/api/telegram-webhook', async (req, res) => {
       await sendDecisionToChannel(application, 'rejected', from.username || from.first_name);
       await answerCallbackQuery(callbackId, '❌ NDA отклонено');
     } else if (action === 'lawyers') {
-      console.log('⚖️ Отправляем юристам...');
+      console.log('⚖️ Рекомендуем консультацию юристов...');
       
       application.status = 'sent_to_lawyers';
       application.sentBy = from.username || from.first_name;
@@ -578,7 +578,7 @@ app.post('/api/telegram-webhook', async (req, res) => {
 
       await editMessageWithResult(messageData.chat.id, messageData.message_id, application, 'sent_to_lawyers');
       await sendDecisionToChannel(application, 'sent_to_lawyers', from.username || from.first_name);
-      await answerCallbackQuery(callbackId, '⚖️ Отправлено юристам');
+      await answerCallbackQuery(callbackId, '⚖️ Нужна консультация юристов');
     }
 
     // Добавляем функцию очистки старых токенов
@@ -623,7 +623,7 @@ async function editMessageWithResult(chatId, messageId, application, decision) {
     let resultMessage = '';
   
   if (decision === 'sent_to_lawyers') {
-    resultMessage = `⚖️ *Отправлено юристам*\n\n📋 *Компания:* ${application.companyName}\n👤 *Ответственный:* ${application.responsible}\n\n*Решение:* ⚖️ ТРЕБУЕТ СОГЛАСОВАНИЯ С ЮРИСТАМИ\n*Кем:* ${application.sentBy}\n*Время:* ${application.sentAt.toLocaleString('ru-RU')}`;
+    resultMessage = `⚖️ *Требует консультации юристов*\n\n📋 *Компания:* ${application.companyName}\n👤 *Ответственный:* ${application.responsible}\n\n*Решение:* ⚖️ РЕКОМЕНДОВАНА КОНСУЛЬТАЦИЯ С ЮРИСТАМИ\n*Кем:* ${application.sentBy}\n*Время:* ${application.sentAt.toLocaleString('ru-RU')}`;
   } else {
     resultMessage = `✅ *Решение принято*
 
@@ -678,7 +678,7 @@ async function sendDecisionToChannel(application, decision, decidedBy) {
   } else if (decision === 'rejected') {
     channelMessage = `❌ *NDA ОТКЛОНЕНО*\n\n📋 *Компания:* ${escapeMarkdown(application.companyName)}\n👤 *Ответственный:* ${escapeMarkdown(application.responsible)}${keyPointsBlock}${summaryBlock}\n\n*Отклонил:* ${escapeMarkdown(decidedBy)}${commentSection}${downloadLine}`;
   } else if (decision === 'sent_to_lawyers') {
-    channelMessage = `⚖️ *NDA ОТПРАВЛЕНО ЮРИСТАМ*\n\n📋 *Компания:* ${escapeMarkdown(application.companyName)}\n👤 *Ответственный:* ${escapeMarkdown(application.responsible)}${keyPointsBlock}${summaryBlock}\n\n*Отправил:* ${escapeMarkdown(decidedBy)}${commentSection}${downloadLine}`;
+    channelMessage = `⚖️ *NDA ТРЕБУЕТ КОНСУЛЬТАЦИИ ЮРИСТОВ*\n\n📋 *Компания:* ${escapeMarkdown(application.companyName)}\n👤 *Ответственный:* ${escapeMarkdown(application.responsible)}${keyPointsBlock}${summaryBlock}\n\n*Рекомендовал:* ${escapeMarkdown(decidedBy)}${commentSection}${downloadLine}`;
   }
   try {
     console.log('📤 Отправляем сообщение в канал...');
